@@ -13,7 +13,6 @@ Assignment brief: see `requirements/requirements.md` (Part 1) and `requirements/
 - [Run with Docker Compose](#run-with-docker-compose)
 - [Run without Docker (local Node)](#run-without-docker-local-node)
 - [Tests](#tests)
-- [Post-agent CI (GitHub)](#post-agent-ci-github)
 - [Canonical example payload](#canonical-example-payload)
 - [Blueprint CLI (Part 2 — Issue #65)](#blueprint-cli-part-2--issue-65)
   - [Build and test (CLI)](#build-and-test-cli)
@@ -136,10 +135,6 @@ docker compose down -v
 ```
 
 The integration script runs Flyway then Vitest unless `SKIP_FLYWAY_INTEGRATION=1` (used by `ci/gh-integration-verify.sh` after Flyway already ran).
-
-## Post-agent CI (GitHub)
-
-After an issue-triggered agent run, workflow **Cursor - label trigger** (`.github/workflows/cursor-label.yml`) runs job **`post_agent_integration`**, which executes `ci/gh-integration-verify.sh` when present. That script brings up `db`, runs Flyway via Docker, runs `npm ci` and `npm run test:integration`, runs **`go test ./...`** under **`cli/`** when Go is installed, then tears down volumes.
 
 ## Canonical example payload
 
