@@ -2,6 +2,27 @@
 
 Assignment brief: see `requirements/requirements.md` (Part 1) and `requirements/cli-implementation.md` (CLI implementation spec). Part 2 assignment text: `requirements/requirements-part2.md`.
 
+## Contents
+
+- [Agentic runs (workflow snapshots)](#agentic-runs-workflow-snapshots)
+- [Stack](#stack)
+- [Environment](#environment)
+- [Quick Start (Docker)](#quick-start-docker)
+- [Quick Start (No Docker)](#quick-start-no-docker)
+- [API (summary)](#api-summary)
+- [Run with Docker Compose](#run-with-docker-compose)
+- [Run without Docker (local Node)](#run-without-docker-local-node)
+- [Tests](#tests)
+- [Post-agent CI (GitHub)](#post-agent-ci-github)
+- [Canonical example payload](#canonical-example-payload)
+- [Blueprint CLI (Part 2 — Issue #65)](#blueprint-cli-part-2--issue-65)
+  - [Build and test (CLI)](#build-and-test-cli)
+  - [Example invocations (API at `http://localhost:3000`)](#example-invocations-api-at-httplocalhost3000)
+- [Implementation Summary](#implementation-summary)
+- [Key Decisions](#key-decisions)
+- [Code Structure](#code-structure)
+- [Run & Verify Locally](#run--verify-locally)
+
 ## Agentic runs (workflow snapshots)
 
 This repository was built across **four** agentic passes (issue-driven Cursor runs). Each pass produced a self-contained copy of the product workflow artifacts under its own folder. Together they form a chronological trail: clarified requirements, implementation plan, decision log, and validation report for that run.
