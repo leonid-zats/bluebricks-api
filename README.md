@@ -1,6 +1,21 @@
 # Blueprint Manager API (Bluebricks — Part 1)
 
-Assignment brief: see `requirements.md` in this folder and `workflow/requirements.md` for the implementation spec.
+Assignment brief: see `requirements/requirements.md` (Part 1) and `requirements/cli-implementation.md` (CLI implementation spec). Part 2 assignment text: `requirements/requirements-part2.md`.
+
+## Agentic runs (workflow snapshots)
+
+This repository was built across **four** agentic passes (issue-driven Cursor runs). Each pass produced a self-contained copy of the product workflow artifacts under its own folder. Together they form a chronological trail: clarified requirements, implementation plan, decision log, and validation report for that run.
+
+| Run | Workflow folder | Scope | Summary |
+|-----|-----------------|-------|---------|
+| 1 | [`workflow.1/`](workflow.1/) | Part 1 API baseline (Issue #59) | Initial Blueprint Manager API: Express, `pg`, Zod, Flyway `V1__create_blueprints.sql`, Docker Compose (`db` / `flyway` / `api`), Vitest unit + integration suites, and `ci/gh-integration-verify.sh` for `post_agent_integration`. |
+| 2 | [`workflow.2/`](workflow.2/) | ORM, OOP, idempotent POST (Issue #61) | Migrated persistence to **Prisma** with **`IBlueprintRepository`**, Flyway **`V2__add_idempotency_key.sql`**, and **`Idempotency-Key`** semantics (201 / 200 / 409); public JSON omits `idempotency_key`. |
+| 3 | [`workflow.3/`](workflow.3/) | Sort tests + JSON errors (Issue #63) | Integration tests assert **list row order** for `sort=name` and `sort=created_at`; **malformed JSON** on `POST /blueprints` maps to **400** `validation_error` / `Invalid JSON body` via **`isMalformedJsonBodyError`**. |
+| 4 | [`workflow.4/`](workflow.4/) | Go CLI + CI hook (Issue #65) | **`cli/`** **`blueprintctl`**: Cobra, `net/http`, base URL via env/flag, **httptest** coverage, README examples with **`bricks.json`**; **`ci/gh-integration-verify.sh`** runs **`go test ./...`** in **`cli/`** when Go is available. |
+
+Inside each folder you will find the same five files: `product_requirements_clarified.md`, `requirements.md`, `plan.md`, `decision_log.md`, and `validation.md`. Paths inside those snapshots may still mention historical `assignments/bluebricks/` layout; the **current** tree is the repository root shown here.
+
+Validation reports only: [Run 1](workflow.1/validation.md) · [Run 2](workflow.2/validation.md) · [Run 3](workflow.3/validation.md) · [Run 4](workflow.4/validation.md).
 
 ## Stack
 
@@ -18,6 +33,36 @@ Assignment brief: see `requirements.md` in this folder and `workflow/requirement
 
 Default local URL when using Compose for the API: `http://localhost:3000`.
 
+## Quick Start (Docker)
+
+From `repository root`:
+
+```bash
+docker compose up --build
+```
+
+Verify the API:
+
+```bash
+curl http://localhost:3000/blueprints?page=1&page_size=20
+```
+
+## Quick Start (No Docker)
+
+Prerequisite: a running PostgreSQL instance and a valid `DATABASE_URL`.
+
+```bash
+npm ci
+npm run build
+npm start
+```
+
+Run migrations before first start (Flyway runs in Docker):
+
+```bash
+bash scripts/migrate-flyway.sh
+```
+
 ## API (summary)
 
 Base path: `/blueprints`
@@ -34,7 +79,7 @@ Validation errors: **400** with `{ "error": "validation_error", "message": "..."
 
 ## Run with Docker Compose
 
-From `assignments/bluebricks/`:
+From `repository root`:
 
 ```bash
 docker compose up --build
@@ -73,7 +118,7 @@ The integration script runs Flyway then Vitest unless `SKIP_FLYWAY_INTEGRATION=1
 
 ## Post-agent CI (GitHub)
 
-After an issue-triggered agent run, workflow **Cursor - label trigger** (`.github/workflows/cursor-label.yml`) runs job **`post_agent_integration`**, which executes `assignments/bluebricks/ci/gh-integration-verify.sh` when present. That script brings up `db`, runs Flyway via Docker, runs `npm ci` and `npm run test:integration`, runs **`go test ./...`** under **`cli/`** when Go is installed, then tears down volumes.
+After an issue-triggered agent run, workflow **Cursor - label trigger** (`.github/workflows/cursor-label.yml`) runs job **`post_agent_integration`**, which executes `ci/gh-integration-verify.sh` when present. That script brings up `db`, runs Flyway via Docker, runs `npm ci` and `npm run test:integration`, runs **`go test ./...`** under **`cli/`** when Go is installed, then tears down volumes.
 
 ## Canonical example payload
 
@@ -97,14 +142,14 @@ Trailing slashes on the base URL are normalized so paths resolve to **`{base}/bl
 ### Build and test (CLI)
 
 ```bash
-cd assignments/bluebricks/cli
+cd cli
 go test ./...
 go build -o blueprintctl ./cmd/blueprintctl
 ```
 
 ### Example invocations (API at `http://localhost:3000`)
 
-With the API running (e.g. `docker compose up --build` from `assignments/bluebricks/`), from **`assignments/bluebricks/cli/`**:
+With the API running (e.g. `docker compose up --build` from `repository root`), from **`cli/`**:
 
 ```bash
 export BLUEPRINTS_API_BASE=http://localhost:3000
@@ -176,7 +221,6 @@ The service uses **Prisma** for all database access, with **`IBlueprintRepositor
 ## Run & Verify Locally
 
 ```bash
-cd assignments/bluebricks
 npm ci
 npm run test:unit
 bash ci/gh-integration-verify.sh

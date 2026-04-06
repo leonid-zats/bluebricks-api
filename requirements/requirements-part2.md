@@ -1,7 +1,7 @@
 # Requirements — Blueprint CLI (Part 2)
 
 Source: **Section 2** of the Bluebricks home assignment (“CLI Tool (Golang)”).  
-**Depends on:** Part 1 API under `assignments/bluebricks/` (`/blueprints` contract). The CLI is an **HTTP client** only; it does not connect to Postgres directly.
+**Depends on:** Part 1 API under `repository root` (`/blueprints` contract). The CLI is an **HTTP client** only; it does not connect to Postgres directly.
 
 ## Primary goal
 
@@ -55,7 +55,7 @@ Naming is up to you (`blueprintctl`, `bb`, etc.) as long as the **flags** below 
 
 ## Project layout (suggested)
 
-- Place Go module under **`assignments/bluebricks/cli/`** (or **`cmd/blueprintctl/`** at task root) — **one** chosen tree, documented in the task README.  
+- Place Go module under **`cli/`** (or **`cmd/blueprintctl/`** at task root) — **one** chosen tree, documented in the task README.  
 - **`go.mod`** at that module root; **`go build`** produces a single binary name documented in README.
 
 ## Testing
@@ -66,7 +66,7 @@ Naming is up to you (`blueprintctl`, `bb`, etc.) as long as the **flags** below 
 
 ## Documentation (task README)
 
-Extend **`assignments/bluebricks/README.md`** (or add a **`cli/README.md`**) with:
+Extend **`README.md`** (or add a **`cli/README.md`**) with:
 
 - Build: `go build -o ... ./...`  
 - Example invocations for all five commands against `http://localhost:3000`.  
