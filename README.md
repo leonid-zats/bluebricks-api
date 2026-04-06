@@ -6,6 +6,7 @@ Assignment brief: see `requirements/requirements.md` (Part 1) and `requirements/
 
 - [Agentic runs (workflow snapshots)](#agentic-runs-workflow-snapshots)
 - [Stack](#stack)
+- [Third-party dependencies](#third-party-dependencies)
 - [Environment](#environment)
 - [Quick Start (Docker)](#quick-start-docker)
 - [Quick Start (No Docker)](#quick-start-no-docker)
@@ -42,6 +43,34 @@ Validation reports only: [Run 1](workflow.1/validation.md) · [Run 2](workflow.2
 - PostgreSQL **16** (`postgres:16-alpine`)  
 - Schema: **Flyway** SQL in `db/migration/` (source of truth); **`prisma/schema.prisma`** mirrors tables for the ORM (`npm run build` runs `prisma generate`)  
 - **Docker Compose**: `db`, one-shot `flyway`, and `api` (see `docker-compose.yml`)
+
+## Third-party dependencies
+
+Libraries and tools pulled in via **`package.json`** and **`cli/go.mod`**. Base images (Node, Postgres, Flyway in Docker) are omitted here.
+
+### Node.js (`package.json`)
+
+| Package | Kind | Summary |
+|---------|------|---------|
+| `@prisma/client` | runtime | Generated Prisma Client for type-safe queries against PostgreSQL. |
+| `express` | runtime | HTTP server, routing, and middleware (including JSON body parsing). |
+| `zod` | runtime | Schema validation for request bodies and list query parameters. |
+| `prisma` | dev / build | CLI for `prisma generate` (runs on `npm run build` / `postinstall`). |
+| `typescript` | dev / build | Compiles TypeScript to JavaScript in `dist/`. |
+| `vitest` | dev / test | Unit and integration test runner. |
+| `supertest` | dev / test | HTTP-level assertions against the Express app in tests. |
+| `tsx` | dev | Runs TypeScript directly for `start:dev` / watch workflows. |
+| `@types/express` | dev | TypeScript typings for Express. |
+| `@types/node` | dev | TypeScript typings for Node.js APIs. |
+| `@types/supertest` | dev | TypeScript typings for Supertest. |
+
+### Go (`cli/go.mod`)
+
+| Module | Kind | Summary |
+|--------|------|---------|
+| `github.com/spf13/cobra` | direct | CLI framework: subcommands (`create`, `get`, …) and persistent flags. |
+| `github.com/spf13/pflag` | transitive | POSIX-style flag parsing used by Cobra. |
+| `github.com/inconshreveable/mousetrap` | transitive | Windows console helper bundled with Cobra for nicer CLI behavior. |
 
 ## Environment
 
