@@ -47,7 +47,7 @@
 
 - [x] `workflow/product_requirements_clarified.md`, `workflow/requirements.md`, `workflow/plan.md`, `workflow/decision_log.md` updated for Issue #65.
 - [x] `workflow/validation.md` filled by Validator with `go test` evidence and failure-mode mapping.
-- [x] `ci/gh-integration-verify.sh` — run `go test ./...` in `cli/` when `go` is on `PATH` (post_agent_integration).
+- [x] **`README.md` / Run & Verify** — documents **`cd cli && go test ./...`** next to API integration steps (`scripts/run-integration-tests.sh` does not invoke Go).
 
 ### 7. Failure-mode validation (trace to `requirements.md`)
 
@@ -58,4 +58,4 @@
 ## Assumptions to validate
 
 - API serves at **`/blueprints`** on the given host (Part 1 `app.ts`).
-- `go` **1.22+** available on CI runners if later extended; for this repo, local **`go test`** only in validation unless workflow added.
+- `go` **1.22+** available on the developer machine for **`go test ./...`** (no `ci/` automation folder in the assignment deliverable).

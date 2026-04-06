@@ -11,9 +11,9 @@ Node.js + TypeScript HTTP service storing Blueprints in PostgreSQL with CRUD at 
 1. TypeScript source in `src/` (Express + `pg`).
 2. Flyway SQL in `db/migration/` (e.g. `V1__create_blueprints.sql`).
 3. `Dockerfile`, `docker-compose.yml`.
-4. `ci/gh-integration-verify.sh` — idempotent Compose up (db), Flyway migrate, `npm ci`, `npm run test:integration`, tear down.
+4. `scripts/run-integration-tests.sh` — idempotent Compose up (db), Flyway migrate, `npm ci`, `npm run test:integration`, tear down.
 5. `package.json` scripts: `test`, `test:unit`, `test:integration`, `build`, `start`.
-6. `README.md` with run/verify and **post_agent_integration** hook reference.
+6. `README.md` with run/verify and integration test instructions (`scripts/run-integration-tests.sh` / `npm run test:integration`).
 7. `bricks.json` — canonical payload fragment for integration tests.
 
 ## Functional requirements
@@ -92,4 +92,4 @@ Auth, Go CLI, catalog semantics beyond JSON storage.
 - [ ] Flyway creates table + indexes
 - [ ] Compose: official postgres + API build
 - [ ] Unit + integration scripts; `bricks.json` in ≥1 integration test
-- [ ] `ci/gh-integration-verify.sh` for GitHub Actions
+- [ ] `scripts/run-integration-tests.sh` documented for local integration runs (no `ci/` folder)

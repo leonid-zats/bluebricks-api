@@ -10,7 +10,7 @@ Deliver a **Go** command-line program that acts as an **HTTP client only** for t
 2. **Single binary** producible via `go build` from that module; **binary name** `blueprintctl` (documented in README).
 3. **Five subcommands:** `create`, `get`, `list`, `update`, `delete` with the flags and HTTP mapping specified below.
 4. **Unit tests** (`go test ./...`): pure logic (base URL resolution, flag/id validation) without network; **at least one** test using **`net/http/httptest`** asserting correct **method**, **path**, **query string**, and **response body on stdout** for **one** command (**`get`** or **`list`**).
-5. **Task README** update: build command, env/flags, example invocations for all five commands using **`http://localhost:3000`** and **`bricks.json`** where applicable; note **`post_agent_integration`** / **`ci/gh-integration-verify.sh`** for API verification (unchanged).
+5. **Task README** update: build command, env/flags, example invocations for all five commands using **`http://localhost:3000`** and **`bricks.json`** where applicable; document API verification in **`README.md`** via **`scripts/run-integration-tests.sh`** / **`npm run test:integration`** (unchanged).
 
 ## Functional requirements
 
@@ -169,10 +169,10 @@ Deliver a **Node.js + TypeScript** HTTP service that persists Blueprints in **Po
 2. **Flyway** versioned migration(s) under `assignments/bluebricks/db/migration/` creating `blueprints`, indexes, and **`idempotency_key`** column with a **unique** constraint (multiple `NULL` keys allowed).
 3. **`prisma/schema.prisma`** aligned with the Flyway schema (introspection or hand-maintained; `prisma generate` runs in build/CI).
 4. **`docker-compose.yml`** (or `compose.yaml`) with `db` (pinned Postgres) and `api` (build from Dockerfile).
-5. **`assignments/bluebricks/ci/gh-integration-verify.sh`** — idempotent: start Postgres (via Compose), run Flyway, `npm ci`, `npm run test:integration`, tear down.
+5. **`scripts/run-integration-tests.sh`** — idempotent: start Postgres (via Compose), run Flyway, `npm ci`, `npm run test:integration`, tear down.
 6. **Unit tests** — no database; validation, pagination/sort parsing, error formatting, DTO mapping, **idempotency body comparison** if extracted as pure logic.
 7. **Integration tests** — real PostgreSQL + Flyway-applied schema; HTTP-level tests; cover CRUD, pagination, sorting, 404, validation, **idempotent POST** (same key + same body → **200** on replay; same key + different body → **409**); at least one test uses `bricks.json` for create/list. **Sorting integration coverage:** at least one test MUST assert **row order** for `sort=name&order=asc` (two created rows with distinct names, ascending order verified on `name`), and at least one test MUST assert **row order** for `sort=created_at&order=asc` (two creates separated by a short wall-clock delay so `created_at` differs; ascending order verified on `created_at` timestamps and names).
-8. **Task README** with run/verify, reference to **`post_agent_integration`** / `assignments/bluebricks/ci/gh-integration-verify.sh`.
+8. **Task README** with run/verify, reference to `scripts/run-integration-tests.sh` and README verification steps.
 9. **OOP:** A **`IBlueprintRepository`** (or equivalent) interface describing persistence operations; a **Prisma-backed implementation** class used by the HTTP layer (dependency injection at router/app construction).
 
 ## Functional requirements

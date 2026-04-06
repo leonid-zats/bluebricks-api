@@ -28,12 +28,12 @@ This repository was built across **four** agentic passes (issue-driven Cursor ru
 
 | Run | Workflow folder | Scope | Summary |
 |-----|-----------------|-------|---------|
-| 1 | [`workflow.1/`](workflow.1/) | Part 1 API baseline (Issue #59) | Initial Blueprint Manager API: Express, `pg`, Zod, Flyway `V1__create_blueprints.sql`, Docker Compose (`db` / `flyway` / `api`), Vitest unit + integration suites, and `ci/gh-integration-verify.sh` for `post_agent_integration`. |
+| 1 | [`workflow.1/`](workflow.1/) | Part 1 API baseline (Issue #59) | Initial Blueprint Manager API: Express, `pg`, Zod, Flyway `V1__create_blueprints.sql`, Docker Compose (`db` / `flyway` / `api`), Vitest unit + integration suites, and **`scripts/run-integration-tests.sh`** for local integration verification. |
 | 2 | [`workflow.2/`](workflow.2/) | ORM, OOP, idempotent POST (Issue #61) | Migrated persistence to **Prisma** with **`IBlueprintRepository`**, Flyway **`V2__add_idempotency_key.sql`**, and **`Idempotency-Key`** semantics (201 / 200 / 409); public JSON omits `idempotency_key`. |
 | 3 | [`workflow.3/`](workflow.3/) | Sort tests + JSON errors (Issue #63) | Integration tests assert **list row order** for `sort=name` and `sort=created_at`; **malformed JSON** on `POST /blueprints` maps to **400** `validation_error` / `Invalid JSON body` via **`isMalformedJsonBodyError`**. |
-| 4 | [`workflow.4/`](workflow.4/) | Go CLI + CI hook (Issue #65) | **`cli/`** **`blueprintctl`**: Cobra, `net/http`, base URL via env/flag, **httptest** coverage, README examples with **`bricks.json`**; **`ci/gh-integration-verify.sh`** runs **`go test ./...`** in **`cli/`** when Go is available. |
+| 4 | [`workflow.4/`](workflow.4/) | Go CLI + httptest (Issue #65) | **`cli/`** **`blueprintctl`**: Cobra, `net/http`, base URL via env/flag, **httptest** coverage, README examples with **`bricks.json`**; verify with **`go test ./...`** (see **Run & Verify Locally**). No `ci/` folder in the assignment deliverable. |
 
-Inside each folder you will find the same five files: `product_requirements_clarified.md`, `requirements.md`, `plan.md`, `decision_log.md`, and `validation.md`. Paths inside those snapshots may still mention historical `assignments/bluebricks/` layout; the **current** tree is the repository root shown here.
+Inside each folder you will find the same five files: `product_requirements_clarified.md`, `requirements.md`, `plan.md`, `decision_log.md`, and `validation.md`. Paths inside those snapshots may still mention historical `assignments/bluebricks/` layout; the **current** tree is the repository root shown here. This assignment does **not** include a `ci/` directory; use **`scripts/run-integration-tests.sh`** and **`npm run test:integration`** (see **Tests** and **Run & Verify Locally**).
 
 Validation reports only: [Run 1](workflow.1/validation.md) · [Run 2](workflow.2/validation.md) · [Run 3](workflow.3/validation.md) · [Run 4](workflow.4/validation.md).
 
@@ -162,7 +162,7 @@ npm run test:integration
 docker compose down -v
 ```
 
-The integration script runs Flyway then Vitest unless `SKIP_FLYWAY_INTEGRATION=1` (used by `ci/gh-integration-verify.sh` after Flyway already ran).
+The integration script runs Flyway then Vitest unless `SKIP_FLYWAY_INTEGRATION=1` (used by `scripts/run-integration-tests.sh` after Flyway already ran).
 
 ## Canonical example payload
 
@@ -217,7 +217,7 @@ The service uses **Prisma** for all database access, with **`IBlueprintRepositor
 
 **Issue #63:** Integration tests assert **row order** for **`sort=name&order=asc`** and **`sort=created_at&order=asc`**. Invalid JSON bodies on POST are mapped in **`blueprintErrorHandler`** from Express body-parser’s **`entity.parse.failed`** (**400**) to **`{ "error": "validation_error", "message": "Invalid JSON body" }`** so clients never see **500** for a simple syntax error.
 
-**Issue #65:** The **`cli/`** Go module implements **`blueprintctl`** with **Cobra** subcommands (**create**, **get**, **list**, **update**, **delete**), **`net/http`**, and **`httptest`**-backed tests for request shape and exit codes. **`ci/gh-integration-verify.sh`** runs **`go test ./...`** in **`cli/`** when **`go`** is on `PATH` so GitHub-hosted runners exercise the CLI alongside the Node integration suite.
+**Issue #65:** The **`cli/`** Go module implements **`blueprintctl`** with **Cobra** subcommands (**create**, **get**, **list**, **update**, **delete**), **`net/http`**, and **`httptest`**-backed tests for request shape and exit codes. **`scripts/run-integration-tests.sh`** covers the Node API integration suite only; run **`cd cli && go test ./...`** separately (documented under **Run & Verify Locally**).
 
 ## Key Decisions
 
@@ -234,7 +234,7 @@ The service uses **Prisma** for all database access, with **`IBlueprintRepositor
 ```bash
 npm ci
 npm run test:unit
-bash ci/gh-integration-verify.sh
+bash scripts/run-integration-tests.sh
 npm run build
 docker compose build api
 cd cli && go test ./...

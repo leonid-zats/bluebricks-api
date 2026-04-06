@@ -30,7 +30,7 @@
 
 ### Justification
 
-Issue #63 is addressed: integration tests now assert **list ordering** for `sort=name&order=asc` and `sort=created_at&order=asc`, and **malformed JSON** on `POST /blueprints` returns **400** with `{ "error": "validation_error", "message": "Invalid JSON body" }` instead of **500**. Ran `npm run test:unit` (5 files, 20 tests), `bash ci/gh-integration-verify.sh` (integration: 1 file, 14 tests), and `npm run build`; all succeeded. `workflow/requirements.md` still contains the five **Distributed systems & reliability** subsections and task-specific **Failure modes**; `plan.md` lists validation steps including malformed JSON and sort ordering. No hard override.
+Issue #63 is addressed: integration tests now assert **list ordering** for `sort=name&order=asc` and `sort=created_at&order=asc`, and **malformed JSON** on `POST /blueprints` returns **400** with `{ "error": "validation_error", "message": "Invalid JSON body" }` instead of **500**. Ran `npm run test:unit` (5 files, 20 tests), `bash scripts/run-integration-tests.sh` (integration: 1 file, 14 tests), and `npm run build`; all succeeded. `workflow/requirements.md` still contains the five **Distributed systems & reliability** subsections and task-specific **Failure modes**; `plan.md` lists validation steps including malformed JSON and sort ordering. No hard override.
 
 ## Summary
 
@@ -41,7 +41,7 @@ This pass validates **Issue #63** on top of the existing Blueprint API: **`isMal
 - Read `workflow/requirements.md` (including §5 **Failure modes**) against `src/errors.ts`, `src/routes/blueprintsRouter.ts`, `tests/integration/api.test.ts`, `tests/unit/errors.test.ts`.
 - Confirmed `workflow/plan.md` includes Issue #63 checklist items for JSON errors and sort integration.
 - Ran `npm run test:unit` (cwd `assignments/bluebricks`).
-- Ran `bash ci/gh-integration-verify.sh` (Postgres via Compose, Flyway, `npm ci`, `npm run test:integration` with `SKIP_FLYWAY_INTEGRATION=1`, teardown).
+- Ran `bash scripts/run-integration-tests.sh` (Postgres via Compose, Flyway, `npm ci`, `npm run test:integration` with `SKIP_FLYWAY_INTEGRATION=1`, teardown).
 - Ran `npm run build`.
 
 ## Results
@@ -53,7 +53,7 @@ This pass validates **Issue #63** on top of the existing Blueprint API: **`isMal
 | Malformed JSON POST → **400** `validation_error` / `Invalid JSON body` | pass |
 | Unit: `isMalformedJsonBodyError` predicate | pass |
 | Existing CRUD, idempotency, list validation, DB 503 | pass (regression) |
-| `ci/gh-integration-verify.sh` | pass |
+| `scripts/run-integration-tests.sh` | pass |
 
 ## Fixes applied
 
@@ -77,7 +77,7 @@ This pass validates **Issue #63** on top of the existing Blueprint API: **`isMal
 
 ## Consistency checks (decision log + task README)
 
-- README **Run & Verify Locally** matches commands executed below (`npm run test:unit`, `bash ci/gh-integration-verify.sh`, `npm run build`).
+- README **Run & Verify Locally** matches commands executed below (`npm run test:unit`, `bash scripts/run-integration-tests.sh`, `npm run build`).
 - **Implementation Summary** / **Key Decisions** / **Code Structure** updated for Issue #63.
 - `workflow/decision_log.md` Issue #63 entries reference paths that exist.
 
@@ -86,7 +86,7 @@ This pass validates **Issue #63** on top of the existing Blueprint API: **`isMal
 | Case | Input | Execution | Observed Output | Expected | Verdict | Mapping |
 |------|-------|-----------|-----------------|----------|---------|---------|
 | unit suite | — | `npm run test:unit` | 5 files, **20** tests passed | all pass | pass | — |
-| integration via CI hook | — | `bash ci/gh-integration-verify.sh` | Flyway up to date; **14** integration tests passed | all pass | pass | — |
+| integration via script | — | `bash scripts/run-integration-tests.sh` | Flyway up to date; **14** integration tests passed | all pass | pass | — |
 | sort by name | Two POSTs `sort63_*_z` then `sort63_*_a`; `GET sort=name&order=asc&page_size=100` | `tests/integration/api.test.ts` | Filtered items length 2; first `*_a`, second `*_z` | ascending name | pass | — |
 | sort by created_at | Two POSTs with 25ms delay; `GET sort=created_at&order=asc&page_size=100` | `tests/integration/api.test.ts` | `*_first` before `*_second`; parsed `created_at` increasing | ascending time | pass | — |
 | malformed JSON POST | Body `{not-json`, `Content-Type: application/json` | `tests/integration/api.test.ts` | **400** `{ "error": "validation_error", "message": "Invalid JSON body" }` | structured 4xx | pass | **Malformed body or invalid blueprint_data** (invalid JSON branch) |
@@ -104,7 +104,7 @@ This pass validates **Issue #63** on top of the existing Blueprint API: **`isMal
 
 ## Environment limitations
 
-None in this run: Docker Compose, Flyway container, and integration hook completed successfully. If a Cloud Agent hits **bridge** / nested Docker errors, workflow **Cursor - label trigger** job **`post_agent_integration`** runs `assignments/bluebricks/ci/gh-integration-verify.sh` on GitHub-hosted runners.
+None in this run: Docker Compose, Flyway container, and **`bash scripts/run-integration-tests.sh`** completed successfully. If a Cloud Agent hits **bridge** / nested Docker errors, rerun the same commands from **`README.md`** on a host where Docker networking works.
 
 ## Unverified
 

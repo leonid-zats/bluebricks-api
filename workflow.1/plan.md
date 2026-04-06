@@ -36,13 +36,13 @@
 - [x] `tests/unit/` — list query parser, body validation, error shapes.
 - [x] `tests/integration/` — spin pool against `DATABASE_URL`, run migrations via **Flyway CLI** in `beforeAll` (subprocess) or document test setup script; use `supertest` against `app` without separate listen; cover: create, get, list pagination+sort, update merge, delete, 404s, validation 400s, malformed id 400; **one test loads `bricks.json`** for create/list.
 
-### 6. CI hook
+### 6. Integration script
 
-- [x] `ci/gh-integration-verify.sh` — `docker compose up -d db`, wait healthy, Flyway migrate (container or compose profile), `npm ci`, `npm run test:integration`, `docker compose down -v`.
+- [x] `scripts/run-integration-tests.sh` — `docker compose up -d db`, wait healthy, Flyway migrate (container or compose profile), `npm ci`, `npm run test:integration`, `docker compose down -v`.
 
 ### 7. Docs
 
-- [x] `README.md` — prerequisites, `docker compose up --build`, env vars, `npm run test:unit` / `test:integration`, pointer to `.github/workflows/cursor-label.yml` job **`post_agent_integration`** and `ci/gh-integration-verify.sh`.
+- [x] `README.md` — prerequisites, `docker compose up --build`, env vars, `npm run test:unit` / `test:integration`, and `scripts/run-integration-tests.sh` (no `ci/` deliverable in the assignment snapshot).
 - [x] `workflow/validation.md` — filled by Builder/Validator with evidence.
 
 ### 8. Failure-mode validation (trace to requirements)
@@ -54,5 +54,5 @@
 
 ## Assumptions to validate
 
-- Flyway CLI available in CI via official `flyway/flyway` Docker image (same as local hook).
-- GitHub runner allows Docker Compose (not nested daemon).
+- Flyway CLI available locally via official `flyway/flyway` Docker image (same image `scripts/migrate-flyway.sh` / integration script use).
+- Host running integration tests needs Docker Compose (and working bridge networking).

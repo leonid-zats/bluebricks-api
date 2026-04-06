@@ -34,15 +34,15 @@ Issue #65 asks for a **Go** `blueprintctl` under **`cli/`** with five subcommand
 
 ## Summary
 
-The **`cli/`** module implements **`blueprintctl`** with **Cobra**, **`net/http`**, **`BLUEPRINTS_API_BASE`** / **`--base-url`**, path joining without double slashes, client-side validation for **`--id`**, **`--page`**, **`--page-size`**, **`--sort`/`--order`**, optional **`--idempotency-key`** on **create**, and exit codes **0** / **1** / **2** per spec. **`ci/gh-integration-verify.sh`** now runs **`go test ./...`** in **`cli/`** when **`go`** is on **`PATH`**, so **`post_agent_integration`** exercises the CLI on GitHub-hosted runners.
+The **`cli/`** module implements **`blueprintctl`** with **Cobra**, **`net/http`**, **`BLUEPRINTS_API_BASE`** / **`--base-url`**, path joining without double slashes, client-side validation for **`--id`**, **`--page`**, **`--page-size`**, **`--sort`/`--order`**, optional **`--idempotency-key`** on **create**, and exit codes **0** / **1** / **2** per spec. **`scripts/run-integration-tests.sh`** runs the Node API integration suite only; the CLI is verified with **`go test ./...`** as documented in **`README.md`** (no `ci/` folder in the assignment deliverable).
 
 ## Checks performed
 
 - Read **`workflow/requirements.md`** (CLI scope + **Distributed systems & reliability** + **Failure modes**) against **`cli/internal/runner/runner.go`** and tests.
 - Ran **`go test ./... -count=1`** in **`assignments/bluebricks/cli`**.
 - Ran **`npm run test:unit`** in **`assignments/bluebricks`** (API regression).
-- Reviewed **`README.md`** for **Implementation Summary**, **Key Decisions**, **Code Structure**, **Run & Verify Locally** (CLI + API).
-- Reviewed **`ci/gh-integration-verify.sh`** for Go hook.
+- Reviewed **`README.md`** for **Implementation Summary**, **Key Decisions**, and **Run & Verify Locally** (CLI + API).
+- Confirmed **`scripts/run-integration-tests.sh`** runs the Node integration suite only; CLI coverage is **`go test ./...`** as documented.
 
 ## Results
 
@@ -55,27 +55,27 @@ The **`cli/`** module implements **`blueprintctl`** with **Cobra**, **`net/http`
 | Exit **0** / **1** / **2**; **4xx/5xx** bodies to **stderr**; **204 delete** silent **stdout** | pass |
 | **`go test ./...`** without Docker; **≥1 httptest** test | pass |
 | README examples with **`../bricks.json`** | pass |
-| **`post_agent_integration`** hook extended for **`go test`** | pass |
+| **README** documents running **`go test ./...`** in **`cli/`** after API checks | pass |
 
 ## Fixes applied
 
-- **Validator / Builder alignment:** None required beyond implementation; **`gh-integration-verify.sh`** updated during Builder pass and verified in review.
+- **Validator / Builder alignment:** None required beyond implementation; README lists **`bash scripts/run-integration-tests.sh`** and **`cd cli && go test ./...`** as separate steps.
 
 ## Residual risks / deferred fixes
 
-- **Manual E2E** against a live **`docker compose`** API was not run in this Cloud Agent session; **httptest** proves request shapes and exit policy; full stack smoke is left to local/CI operators.
+- **Manual E2E** against a live **`docker compose`** API was not run in this Cloud Agent session; **httptest** proves request shapes and exit policy; full stack smoke is left to local operators.
 - **“Connection refused”** is not covered by a dedicated test (same **exit 2** path as other transport errors; low risk).
 
 ## Diff analysis
 
-- **Files changed:** `assignments/bluebricks/README.md`, `assignments/bluebricks/ci/gh-integration-verify.sh`, `assignments/bluebricks/workflow/*` (product/requirements/plan/decision_log/validation), new tree **`assignments/bluebricks/cli/**` (`go.mod`, `go.sum`, `cmd/`, `internal/`, tests, `.gitignore`).
-- **Lines added/removed:** After staging, see `git diff --cached --stat` (substantial addition is **`cli/`** + workflow/README/CI edits).
+- **Files changed:** `assignments/bluebricks/README.md`, `assignments/bluebricks/workflow/*` (product/requirements/plan/decision_log/validation), new tree **`assignments/bluebricks/cli/**` (`go.mod`, `go.sum`, `cmd/`, `internal/`, tests, `.gitignore`). (Assignment deliverable omits a `ci/` folder; integration uses **`scripts/run-integration-tests.sh`**.)
+- **Lines added/removed:** After staging, see `git diff --cached --stat` (substantial addition is **`cli/`** + workflow/README edits).
 - **Unrelated files touched:** none
 
 **Assessment:**
 
 - **Changes are minimal and scoped to task:** yes
-- **Rationale:** All paths stay under **`assignments/bluebricks/`** and implement Issue #65 (CLI + workflow + CI hook + README).
+- **Rationale:** All paths stay under **`assignments/bluebricks/`** and implement Issue #65 (CLI + workflow + README).
 
 ## Consistency checks (decision log + task README)
 
@@ -124,7 +124,7 @@ The **`cli/`** module implements **`blueprintctl`** with **Cobra**, **`net/http`
 ## Unverified
 
 - **Full stack:** Running **`blueprintctl`** against **`docker compose up`** API (manual smoke).
-- **`bash ci/gh-integration-verify.sh`:** Not re-run end-to-end here after the Go hook (script change is small; **`post_agent_integration`** will run it on labeled PRs).
+- **`bash scripts/run-integration-tests.sh`:** Optional to re-run end-to-end in every pass; when needed, run it together with **`cd cli && go test ./...`** as documented in **`README.md`**.
 
 ## Context7 checks
 

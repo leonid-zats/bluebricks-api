@@ -39,9 +39,9 @@
 - [x] Unit: `blueprintPayload.test.ts`, `idempotencyKey.test.ts`; keep list/body tests.
 - [x] Integration: idempotent POST **200** replay, **409** conflict; DB 503 with Prisma bad URL; update imports from pool → prisma.
 
-### 6. CI hook
+### 6. Integration script
 
-- [x] `ci/gh-integration-verify.sh` unchanged behavior (Flyway applies V2).
+- [x] `scripts/run-integration-tests.sh` unchanged behavior (Flyway applies V2).
 
 ### 7. Docs & workflow
 

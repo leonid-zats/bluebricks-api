@@ -12,9 +12,9 @@ Node.js + TypeScript HTTP service storing Blueprints in PostgreSQL with CRUD at 
 2. `prisma/schema.prisma` matching Flyway-managed tables.
 3. Flyway SQL in `db/migration/` including **`V2__add_idempotency_key.sql`** (nullable `idempotency_key`, unique index).
 4. `Dockerfile`, `docker-compose.yml` (API image runs `prisma generate` / copies generated engine as in Dockerfile).
-5. `ci/gh-integration-verify.sh` — idempotent Compose up (db), Flyway migrate, `npm ci`, `npm run test:integration`, tear down.
+5. `scripts/run-integration-tests.sh` — idempotent Compose up (db), Flyway migrate, `npm ci`, `npm run test:integration`, tear down.
 6. `package.json` scripts: `test`, `test:unit`, `test:integration`, `build` (includes `prisma generate`), `start`.
-7. `README.md` with run/verify and **post_agent_integration** hook reference.
+7. `README.md` with run/verify and integration test instructions (`scripts/run-integration-tests.sh` / `npm run test:integration`).
 8. **OOP:** `IBlueprintRepository` interface + `PrismaBlueprintRepository` implementation; router receives `PrismaClient` (or repository) from composition root.
 
 ## Functional requirements
@@ -97,4 +97,4 @@ Auth, Go CLI, catalog semantics beyond JSON storage.
 - [ ] Compose: official postgres + API build
 - [ ] Idempotent POST: 200 replay, 409 conflict, optional race (P2002)
 - [ ] Unit + integration; `bricks.json` in ≥1 integration test
-- [ ] `ci/gh-integration-verify.sh` for GitHub Actions
+- [ ] `scripts/run-integration-tests.sh` documented for local integration runs (no `ci/` folder)

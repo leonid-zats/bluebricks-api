@@ -22,11 +22,11 @@ Issue #59 targets `assignments/bluebricks/` for the Blueprint Manager API (Part 
 
 ### Decision
 
-Implement full Part 1 scope: five HTTP routes, Flyway migrations under `assignments/bluebricks/db/migration/`, Compose with `postgres:16-alpine` + API Dockerfile, split test suites, and `ci/gh-integration-verify.sh` for `post_agent_integration`.
+Implement full Part 1 scope: five HTTP routes, Flyway migrations under `assignments/bluebricks/db/migration/`, Compose with `postgres:16-alpine` + API Dockerfile, split test suites, and **`scripts/run-integration-tests.sh`** for local integration verification.
 
 ### Rationale
 
-Matches the written assignment checklist and enables GitHub-hosted verification where Cloud Agent Docker may be unavailable.
+Matches the written assignment checklist; integration verification uses **`scripts/run-integration-tests.sh`** / **`npm run test:integration`** on a host with Docker (no `ci/` folder in the deliverable).
 
 ### Trade-offs
 
@@ -53,7 +53,7 @@ Decision
 
 - TypeScript, Express 5, `pg`, Zod for JSON body and query validation.
 - Repository class encapsulates SQL; router thin; list query parsing in a small pure module for unit tests.
-- Flyway migrations in `db/migration/`; CI hook runs Compose (db + optional flyway profile), Flyway migrate, then integration tests.
+- Flyway migrations in `db/migration/`; `scripts/run-integration-tests.sh` / README steps run Compose (db + optional flyway profile), Flyway migrate, then integration tests.
 
 Rationale
 
@@ -66,7 +66,7 @@ Trade-offs
 
 Impact
 
-- Deliverables under `assignments/bluebricks/` only; CI verified via `post_agent_integration` when PR exists.
+- Deliverables under `assignments/bluebricks/` only; integration verification documented in README (local scripts).
 
 Related files
 
@@ -80,7 +80,7 @@ Related files
 
 Context
 
-Implement Blueprint Manager API per `workflow/requirements.md` and `workflow/plan.md` with Flyway, Compose, split tests, and GitHub integration hook.
+Implement Blueprint Manager API per `workflow/requirements.md` and `workflow/plan.md` with Flyway, Compose, split tests, and **`scripts/run-integration-tests.sh`** (local integration; not a `ci/` deliverable).
 
 Options considered
 
@@ -89,11 +89,11 @@ Options considered
 
 Decision
 
-- Implemented Express routes, `BlueprintRepository`, Zod validation modules, Flyway `V1__create_blueprints.sql`, Dockerfile, compose with `db` + `flyway` + `api`, `scripts/migrate-flyway.sh`, `ci/gh-integration-verify.sh` with `SKIP_FLYWAY_INTEGRATION=1` to avoid double migrate.
+- Implemented Express routes, `BlueprintRepository`, Zod validation modules, Flyway `V1__create_blueprints.sql`, Dockerfile, compose with `db` + `flyway` + `api`, `scripts/migrate-flyway.sh`, `scripts/run-integration-tests.sh` with `SKIP_FLYWAY_INTEGRATION=1` to avoid double migrate.
 
 Rationale
 
-Meets HTTP contract tests, keeps SQL parameterized, documents CI path for environments without nested Docker constraints on the agent.
+Meets HTTP contract tests, keeps SQL parameterized, documents an integration path for environments without nested Docker constraints on the agent.
 
 Trade-offs
 
@@ -102,13 +102,13 @@ Trade-offs
 
 Impact
 
-All deliverables live under `assignments/bluebricks/`; `package-lock.json` committed for reproducible CI.
+All deliverables live under `assignments/bluebricks/`; `package-lock.json` committed for reproducible installs.
 
 Related files
 
 - `assignments/bluebricks/src/**/*.ts`
 - `assignments/bluebricks/docker-compose.yml`
-- `assignments/bluebricks/ci/gh-integration-verify.sh`
+- `scripts/run-integration-tests.sh`
 - `assignments/bluebricks/tests/**/*.ts`
 
 ---
@@ -121,7 +121,7 @@ Confirm implementation against `workflow/requirements.md`, run tests, score, and
 
 Options considered
 
-- Run `ci/gh-integration-verify.sh` locally: redundant with separate `docker compose up db` + `npm run test:integration` already executed; hook mirrors CI.
+- Run `scripts/run-integration-tests.sh` locally: redundant with separate `docker compose up db` + `npm run test:integration` already executed; same flow as documented in README.
 
 Decision
 
@@ -133,7 +133,7 @@ Full behavioral surface covered by tests; requirements distributed-systems secti
 
 Trade-offs
 
-- Did not re-run `gh-integration-verify.sh` end-to-end in this session after final compose.yml change; script is straightforward mirror of documented steps.
+- Did not re-run `scripts/run-integration-tests.sh` end-to-end in this session after final compose.yml change; script is straightforward mirror of documented steps.
 
 Impact
 

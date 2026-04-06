@@ -9,10 +9,10 @@ Deliver a **Node.js + TypeScript** HTTP service that persists Blueprints in **Po
 1. **Source code** under `assignments/bluebricks/` (TypeScript, parameterized SQL via `pg`).
 2. **Flyway** versioned migration(s) under `assignments/bluebricks/db/migration/` creating `blueprints` and indexes.
 3. **`docker-compose.yml`** (or `compose.yaml`) with `db` (pinned Postgres) and `api` (build from Dockerfile).
-4. **`assignments/bluebricks/ci/gh-integration-verify.sh`** — idempotent: start Postgres (via Compose), run Flyway, `npm ci`, `npm run test:integration`, tear down.
+4. **`scripts/run-integration-tests.sh`** — idempotent: start Postgres (via Compose), run Flyway, `npm ci`, `npm run test:integration`, tear down.
 5. **Unit tests** — no database; validation, pagination/sort parsing, error formatting, DTO mapping.
 6. **Integration tests** — real PostgreSQL + Flyway-applied schema; HTTP-level or repository-level with real pool; cover CRUD, pagination, sorting, 404, validation; at least one test uses `bricks.json` for create/list.
-7. **Task README** with run/verify, reference to **`post_agent_integration`** / `assignments/bluebricks/ci/gh-integration-verify.sh`.
+7. **Task README** with run/verify, reference to `scripts/run-integration-tests.sh` and README verification steps.
 
 ## Functional requirements
 

@@ -30,17 +30,17 @@
 
 ### Justification
 
-All routes, Flyway DDL, Docker/Compose layout, split tests, and `ci/gh-integration-verify.sh` match `workflow/requirements.md`. Unit and integration tests pass with exact status/body assertions for 400/404/503 cases. Reliability subsections in the spec are largely N/A for a synchronous CRUD service; failure-mode tests cover invalid query params, validation bodies, and DB connection refusal. No Context7 lookups were required (Express/pg/Zod usage is standard). `gh-integration-verify.sh` was executed successfully end-to-end in this environment.
+All routes, Flyway DDL, Docker/Compose layout, split tests, and `scripts/run-integration-tests.sh` match `workflow/requirements.md`. Unit and integration tests pass with exact status/body assertions for 400/404/503 cases. Reliability subsections in the spec are largely N/A for a synchronous CRUD service; failure-mode tests cover invalid query params, validation bodies, and DB connection refusal. No Context7 lookups were required (Express/pg/Zod usage is standard). `scripts/run-integration-tests.sh` was executed successfully end-to-end in this environment.
 
 ## Summary
 
-The Blueprint Manager API is implemented as an Express + `pg` service with Zod validation, Flyway migration `V1__create_blueprints.sql`, Docker Compose (`db`, one-shot `flyway`, `api`), Vitest unit and integration suites, and a GitHub Actions integration hook. Verification used local Docker Compose for Postgres and the Flyway Docker image.
+The Blueprint Manager API is implemented as an Express + `pg` service with Zod validation, Flyway migration `V1__create_blueprints.sql`, Docker Compose (`db`, one-shot `flyway`, `api`), Vitest unit and integration suites, and **`scripts/run-integration-tests.sh`** for local integration runs (no `ci/` folder in the assignment deliverable). Verification used local Docker Compose for Postgres and the Flyway Docker image.
 
 ## Checks performed
 
 - Read `workflow/requirements.md` against `src/**/*.ts`, `docker-compose.yml`, `Dockerfile`, tests, and scripts.
 - Ran `npm run test:unit`, `docker compose up -d db`, `npm run test:integration`, `docker compose down -v`.
-- Ran `bash ci/gh-integration-verify.sh` (full CI mirror).
+- Ran `bash scripts/run-integration-tests.sh` (Flyway + Vitest integration path).
 - Earlier in session: `npm run build`, `docker compose build api`.
 
 ## Results
@@ -59,7 +59,7 @@ The Blueprint Manager API is implemented as an Express + `pg` service with Zod v
 | Compose postgres:16-alpine + API | pass |
 | Unit tests without DB | pass |
 | Integration + `bricks.json` | pass |
-| `ci/gh-integration-verify.sh` | pass |
+| `scripts/run-integration-tests.sh` | pass |
 
 ## Fixes applied
 
@@ -107,7 +107,7 @@ None (implementation met spec on first validation pass).
 
 ## Environment limitations
 
-None in this run: Docker Compose and `docker compose build api` succeeded. If a future environment reports **network bridge not found** or similar nested-Docker errors, run **`post_agent_integration`** (`.github/workflows/cursor-label.yml`) after opening a PR so `assignments/bluebricks/ci/gh-integration-verify.sh` runs on GitHub-hosted runners, or run the README commands on a host with Docker.
+None in this run: Docker Compose and `docker compose build api` succeeded. If a future environment reports **network bridge not found** or similar nested-Docker errors, run the **Tests** / **Run & Verify Locally** steps from **`README.md`** on a host with Docker (Flyway + Vitest via `scripts/run-integration-tests.sh` / `npm run test:integration`).
 
 ## Unverified
 

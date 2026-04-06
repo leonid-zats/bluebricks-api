@@ -30,7 +30,7 @@
 
 ### Justification
 
-Prisma ORM, `IBlueprintRepository` + implementation, Flyway V2 `idempotency_key`, and `Idempotency-Key` semantics (201 / 200 / 409) match `workflow/requirements.md`. Unit tests (17) and integration tests (12) pass; `bash ci/gh-integration-verify.sh` and `docker compose build api` succeeded. Reliability subsections are filled with task-specific idempotency behavior; failure-mode tests map to named scenarios including idempotency conflict. No hard override: core contract and tests are green.
+Prisma ORM, `IBlueprintRepository` + implementation, Flyway V2 `idempotency_key`, and `Idempotency-Key` semantics (201 / 200 / 409) match `workflow/requirements.md`. Unit tests (17) and integration tests (12) pass; `bash scripts/run-integration-tests.sh` and `docker compose build api` succeeded. Reliability subsections are filled with task-specific idempotency behavior; failure-mode tests map to named scenarios including idempotency conflict. No hard override: core contract and tests are green.
 
 ## Summary
 
@@ -40,7 +40,7 @@ The service now uses **Prisma** against Flyway-managed tables, exposes the same 
 
 - Read `workflow/requirements.md` against `src/**/*.ts`, `prisma/schema.prisma`, `db/migration/V2__add_idempotency_key.sql`, `Dockerfile`, tests.
 - Ran `npm run test:unit` (cwd `assignments/bluebricks`).
-- Ran `bash ci/gh-integration-verify.sh` (Flyway validate + `npm ci` + integration tests + `docker compose down -v`).
+- Ran `bash scripts/run-integration-tests.sh` (Flyway validate + `npm ci` + integration tests + `docker compose down -v`).
 - Ran `docker compose build api`.
 - Confirmed `workflow/requirements.md` contains all five **Distributed systems & reliability** subsections and ≥3 task-specific failure scenarios under **### 5. Failure modes**; `workflow/plan.md` lists matching validation steps.
 
@@ -58,7 +58,7 @@ The service now uses **Prisma** against Flyway-managed tables, exposes the same 
 | DELETE 204 | pass |
 | DB unavailable 503 (Prisma bad URL) | pass |
 | Unit + integration + `bricks.json` | pass |
-| `ci/gh-integration-verify.sh` | pass |
+| `scripts/run-integration-tests.sh` | pass |
 | Docker API image build | pass |
 
 ## Fixes applied
@@ -91,7 +91,7 @@ None during this validation pass (implementation matched spec after Builder chan
 | Case | Input | Execution | Observed Output | Expected | Verdict | Mapping |
 |------|-------|-----------|-----------------|----------|---------|---------|
 | unit suite | — | `npm run test:unit` | 4 files, 17 tests passed | all pass | pass | — |
-| integration suite | — | `bash ci/gh-integration-verify.sh` → `npm run test:integration` | 1 file, 12 tests passed | all pass | pass | — |
+| integration suite | — | `bash scripts/run-integration-tests.sh` → `npm run test:integration` | 1 file, 12 tests passed | all pass | pass | — |
 | idempotency replay | same `Idempotency-Key` + same body | `tests/integration/api.test.ts` | second response **200**, body equals first **201** | 200 replay | pass | Recovery / idempotent POST (`workflow/requirements.md` §1) |
 | idempotency conflict | same key, different `name` | integration | **409**, `{ "error": "conflict", "message": "Idempotency-Key already used with a different request body" }` | 409 conflict | pass | **Idempotency key conflict (different body)** |
 | invalid list | `GET /blueprints?page=0` | integration | **400**, `validation_error` | 400 | pass | **Invalid pagination or sort** |
@@ -108,7 +108,7 @@ None during this validation pass (implementation matched spec after Builder chan
 
 ## Environment limitations
 
-None in this run: Docker Compose, Flyway container, and `docker compose build api` succeeded. If nested Docker reports **bridge** errors, use workflow **Cursor - label trigger** job **`post_agent_integration`** to run `assignments/bluebricks/ci/gh-integration-verify.sh` on GitHub-hosted runners.
+None in this run: Docker Compose, Flyway container, and `docker compose build api` succeeded. If nested Docker reports **bridge** errors, run **`bash scripts/run-integration-tests.sh`** (or the equivalent Compose + `npm run test:integration` steps in **`README.md`**) on a machine with a working Docker daemon.
 
 ## Unverified
 

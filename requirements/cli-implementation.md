@@ -12,7 +12,7 @@
 2. **`cmd/blueprintctl/main.go`** entrypoint; **`go build -o blueprintctl ./cmd/blueprintctl`** produces binary **`blueprintctl`**.
 3. Subcommands: **`create`**, **`get`**, **`list`**, **`update`**, **`delete`** with flags and HTTP mapping in the table below.
 4. **`go test ./...`** (no Docker): unit tests for URL resolution, validation; **≥ 1** **`httptest.Server`** test asserting method, path, query (for **`list`** or **`get`**), and stdout content.
-5. **`README.md`**: CLI build, env **`BLUEPRINTS_API_BASE`**, flag **`--base-url`**, examples for all five commands using **`http://localhost:3000`** and **`bricks.json`**; reference **`post_agent_integration`** / **`ci/gh-integration-verify.sh`** for API verification.
+5. **`README.md`**: CLI build, env **`BLUEPRINTS_API_BASE`**, flag **`--base-url`**, examples for all five commands using **`http://localhost:3000`** and **`bricks.json`**; reference **`scripts/run-integration-tests.sh`** and the **Tests** section in **`README.md`** for API verification.
 
 ## Functional requirements
 

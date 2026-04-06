@@ -10,10 +10,10 @@ Deliver a **Node.js + TypeScript** HTTP service that persists Blueprints in **Po
 2. **Flyway** versioned migration(s) under `assignments/bluebricks/db/migration/` creating `blueprints`, indexes, and **`idempotency_key`** column with a **unique** constraint (multiple `NULL` keys allowed).
 3. **`prisma/schema.prisma`** aligned with the Flyway schema (introspection or hand-maintained; `prisma generate` runs in build/CI).
 4. **`docker-compose.yml`** (or `compose.yaml`) with `db` (pinned Postgres) and `api` (build from Dockerfile).
-5. **`assignments/bluebricks/ci/gh-integration-verify.sh`** — idempotent: start Postgres (via Compose), run Flyway, `npm ci`, `npm run test:integration`, tear down.
+5. **`scripts/run-integration-tests.sh`** — idempotent: start Postgres (via Compose), run Flyway, `npm ci`, `npm run test:integration`, tear down.
 6. **Unit tests** — no database; validation, pagination/sort parsing, error formatting, DTO mapping, **idempotency body comparison** if extracted as pure logic.
 7. **Integration tests** — real PostgreSQL + Flyway-applied schema; HTTP-level tests; cover CRUD, pagination, sorting, 404, validation, **idempotent POST** (same key + same body → **200** on replay; same key + different body → **409**); at least one test uses `bricks.json` for create/list. **Sorting integration coverage:** at least one test MUST assert **row order** for `sort=name&order=asc` (two created rows with distinct names, ascending order verified on `name`), and at least one test MUST assert **row order** for `sort=created_at&order=asc` (two creates separated by a short wall-clock delay so `created_at` differs; ascending order verified on `created_at` timestamps and names).
-8. **Task README** with run/verify, reference to **`post_agent_integration`** / `assignments/bluebricks/ci/gh-integration-verify.sh`.
+8. **Task README** with run/verify, reference to `scripts/run-integration-tests.sh` and README verification steps.
 9. **OOP:** A **`IBlueprintRepository`** (or equivalent) interface describing persistence operations; a **Prisma-backed implementation** class used by the HTTP layer (dependency injection at router/app construction).
 
 ## Functional requirements
