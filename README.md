@@ -241,3 +241,5 @@ cd cli && go test ./...
 ```
 
 Expected: unit tests pass (Vitest **19** tests in `tests/unit/`); integration script runs Flyway (if needed), integration tests pass, **`go test ./...`** in **`cli/`** passes when Go is available, Compose teardown succeeds; TypeScript build succeeds; API image builds successfully.
+
+**End-to-end CLI smoke (live API):** With the service reachable at **`http://127.0.0.1:3000`** (for example **`docker compose up --build`** when ports **3000** / Postgres are free), run **`bash scripts/verify-cli-against-api.sh`**. Set **`BLUEPRINTS_API_BASE`** if the API uses another origin.
