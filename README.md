@@ -30,7 +30,7 @@ Base path: `/blueprints`
 
 Responses do **not** include the internal `idempotency_key` column.
 
-Validation errors: **400** with `{ "error": "validation_error", "message": "..." }`. Idempotency key too long: **400** `validation_error`. DB unreachable: **503** with `{ "error": "service_unavailable", "message": "Database unavailable" }`.
+Validation errors: **400** with `{ "error": "validation_error", "message": "..." }`. **Malformed JSON** (invalid syntax with `Content-Type: application/json`): **400** with `{ "error": "validation_error", "message": "Invalid JSON body" }`. Idempotency key too long: **400** `validation_error`. DB unreachable: **503** with `{ "error": "service_unavailable", "message": "Database unavailable" }`.
 
 ## Run with Docker Compose
 
@@ -85,6 +85,8 @@ After an issue-triggered agent run, workflow **Cursor - label trigger** (`.githu
 
 The service uses **Prisma** for all database access, with **`IBlueprintRepository`** implemented by **`PrismaBlueprintRepository`**. Flyway migration **`V2__add_idempotency_key.sql`** adds a nullable, uniquely indexed **`idempotency_key`** column. **`POST /blueprints`** reads the **`Idempotency-Key`** header: duplicate key with matching body returns **200** and the original row; duplicate key with a different body returns **409**. Concurrent creates with the same new key rely on the unique index and **P2002** handling. List queries use Prisma `orderBy` with fixed sort branches (no user-controlled SQL fragments). The **Dockerfile** copies **`prisma/`** before **`npm ci`** so `postinstall` can run `prisma generate`, and copies the generated **`.prisma`** engine from the build stage into the production image.
 
+**Issue #63:** Integration tests assert **row order** for **`sort=name&order=asc`** and **`sort=created_at&order=asc`**. Invalid JSON bodies on POST are mapped in **`blueprintErrorHandler`** from Express body-parser’s **`entity.parse.failed`** (**400**) to **`{ "error": "validation_error", "message": "Invalid JSON body" }`** so clients never see **500** for a simple syntax error.
+
 ## Key Decisions
 
 - **Prisma** as the ORM (issue #61); **Flyway** remains authoritative for DDL.  
@@ -92,6 +94,8 @@ The service uses **Prisma** for all database access, with **`IBlueprintRepositor
 - **Idempotency** via **`Idempotency-Key`** header + DB unique constraint + payload deep equality (`util.isDeepStrictEqual` on `blueprint_data`).  
 - **Public JSON omits `idempotency_key`.**  
 - **`ci/gh-integration-verify.sh`** unchanged contract; applies **V1 + V2** migrations on CI.  
+- **`isMalformedJsonBodyError`** (issue #63) detects body-parser JSON parse failures and returns structured **400** like other validation errors.  
+- **Integration sort tests** (issue #63) filter rows by unique name prefix and assert ordering ( **`page_size` ≤ 100** per API rules).  
 
 ## Code Structure
 
@@ -106,7 +110,7 @@ The service uses **Prisma** for all database access, with **`IBlueprintRepositor
 | `src/validation/idempotencyKey.ts` | Parse / validate `Idempotency-Key` header |
 | `src/server.ts` | Prisma client, HTTP server, `$disconnect` on shutdown |
 | `src/app.ts` | Express app + JSON middleware |
-| `src/errors.ts` | `HttpError` + JSON body helper |
+| `src/errors.ts` | `HttpError`, **`isMalformedJsonBodyError`** (invalid JSON from body-parser) |
 | `src/validation/listQuery.ts` | List query parsing (unit-tested) |
 | `src/validation/body.ts` | Create / merge body schemas |
 | `src/serialization.ts` | Row → API JSON (hides `idempotency_key`) |
@@ -116,7 +120,7 @@ The service uses **Prisma** for all database access, with **`IBlueprintRepositor
 | `scripts/migrate-flyway.sh` | Flyway migrate (Docker) |
 | `scripts/run-integration-tests.sh` | Flyway + Vitest integration |
 | `ci/gh-integration-verify.sh` | GitHub Actions integration hook |
-| `tests/unit/` | Validation + idempotency unit tests |
+| `tests/unit/` | Validation + idempotency + **JSON error shape** unit tests |
 | `tests/integration/api.test.ts` | HTTP + real Postgres |
 
 ## Run & Verify Locally
@@ -126,7 +130,8 @@ cd assignments/bluebricks
 npm ci
 npm run test:unit
 bash ci/gh-integration-verify.sh
+npm run build
 docker compose build api
 ```
 
-Expected: unit tests pass; integration script runs Flyway (if needed), integration tests pass, Compose teardown succeeds; API image builds successfully.
+Expected: unit tests pass (**20** tests including `errors.test.ts`); integration script runs Flyway (if needed), **14** integration tests pass, Compose teardown succeeds; TypeScript build succeeds; API image builds successfully.

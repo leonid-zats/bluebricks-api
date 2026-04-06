@@ -104,8 +104,80 @@ describe("Blueprint API (integration)", () => {
     });
   });
 
-  it("GET list sort by name asc", async () => {
-    await request(app).get("/blueprints?sort=name&order=asc&page_size=50").expect(200);
+  it("GET list sort by name asc orders items by name", async () => {
+    const ts = Date.now();
+    const prefix = `sort63_${ts}`;
+    await request(app)
+      .post("/blueprints")
+      .send({
+        name: `${prefix}_z`,
+        version: "1",
+        author: "sort@test",
+        blueprint_data: {},
+      })
+      .expect(201);
+    await request(app)
+      .post("/blueprints")
+      .send({
+        name: `${prefix}_a`,
+        version: "1",
+        author: "sort@test",
+        blueprint_data: {},
+      })
+      .expect(201);
+
+    const list = await request(app).get("/blueprints?sort=name&order=asc&page_size=100").expect(200);
+    const ours = list.body.items.filter((b: { name: string }) => b.name.startsWith(`${prefix}_`));
+    expect(ours).toHaveLength(2);
+    expect(ours[0].name).toBe(`${prefix}_a`);
+    expect(ours[1].name).toBe(`${prefix}_z`);
+  });
+
+  it("GET list sort by created_at asc orders older rows first", async () => {
+    const ts = Date.now();
+    const prefix = `created63_${ts}`;
+    await request(app)
+      .post("/blueprints")
+      .send({
+        name: `${prefix}_first`,
+        version: "1",
+        author: "created@test",
+        blueprint_data: {},
+      })
+      .expect(201);
+    await new Promise((r) => setTimeout(r, 25));
+    await request(app)
+      .post("/blueprints")
+      .send({
+        name: `${prefix}_second`,
+        version: "1",
+        author: "created@test",
+        blueprint_data: {},
+      })
+      .expect(201);
+
+    const list = await request(app)
+      .get("/blueprints?sort=created_at&order=asc&page_size=100")
+      .expect(200);
+    const ours = list.body.items.filter((b: { name: string }) => b.name.startsWith(`${prefix}_`));
+    expect(ours).toHaveLength(2);
+    expect(ours[0].name).toBe(`${prefix}_first`);
+    expect(ours[1].name).toBe(`${prefix}_second`);
+    const t0 = Date.parse(ours[0].created_at as string);
+    const t1 = Date.parse(ours[1].created_at as string);
+    expect(t0).toBeLessThan(t1);
+  });
+
+  it("POST 400 when body is not valid JSON", async () => {
+    const res = await request(app)
+      .post("/blueprints")
+      .set("Content-Type", "application/json")
+      .send("{not-json")
+      .expect(400);
+    expect(res.body).toEqual({
+      error: "validation_error",
+      message: "Invalid JSON body",
+    });
   });
 
   it("PUT merge and DELETE 204", async () => {

@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { ZodError } from "zod";
-import { HttpError } from "../errors.js";
+import { HttpError, isMalformedJsonBodyError } from "../errors.js";
 import { isSameCreatePayload } from "../repository/blueprintPayload.js";
 import { PrismaBlueprintRepository } from "../repository/PrismaBlueprintRepository.js";
 import { blueprintToJson } from "../serialization.js";
@@ -173,6 +173,13 @@ export function createBlueprintsRouter(prisma: PrismaClient): Router {
 export function blueprintErrorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
   if (err instanceof HttpError) {
     res.status(err.status).json(err.toBody());
+    return;
+  }
+  if (isMalformedJsonBodyError(err)) {
+    res.status(400).json({
+      error: "validation_error",
+      message: "Invalid JSON body",
+    });
     return;
   }
   if (err instanceof ZodError) {

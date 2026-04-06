@@ -35,7 +35,7 @@ Migration must support sorts: `name`, `version`, `created_at`, and default **`cr
 
 ### Routes
 
-- **`POST /blueprints`** — Optional header `Idempotency-Key` (case-insensitive). Empty/whitespace → absent. Max length **255** after trim → **400** `validation_error`. Same key + same body as existing row → **200** with same representation. Same key + different body → **409** `{ "error": "conflict", "message": "Idempotency-Key already used with a different request body" }`. No key → **201** on success. Handle **P2002** race: re-read by key and return **200** or **409** accordingly.
+- **`POST /blueprints`** — Optional header `Idempotency-Key` (case-insensitive). Empty/whitespace → absent. Max length **255** after trim → **400** `validation_error`. Same key + same body as existing row → **200** with same representation. Same key + different body → **409** `{ "error": "conflict", "message": "Idempotency-Key already used with a different request body" }`. No key → **201** on success. Handle **P2002** race: re-read by key and return **200** or **409** accordingly. **Malformed JSON** (`Content-Type: application/json`, body not valid JSON): **400** `{ "error": "validation_error", "message": "Invalid JSON body" }` (not **500**).
 - **`GET /blueprints`** — Query: `page` (≥1, default 1), `page_size` (1–100, default 20), `sort` optional: `name` | `version` | `created_at`, `order`: `asc` | `desc` (default `asc` when `sort` set). If `sort` omitted: order by `created_at DESC, id DESC`. Response: `{ items, page, page_size, total, total_pages }`. **Items MUST NOT include `idempotency_key`.** Invalid query → 400. `total_pages` = 0 when `total=0`.
 - **`GET /blueprints/:id`** — 200 or 404 structured JSON. Non-numeric or non-positive `id` → 400. No `idempotency_key` in JSON.
 - **`PUT /blueprints/:id`** — Merge update; 200 or 404. Malformed `id` → 400. Does not change `idempotency_key`.
@@ -43,7 +43,7 @@ Migration must support sorts: `name`, `version`, `created_at`, and default **`cr
 
 ### HTTP contract tests
 
-Tests MUST assert **exact** success and error shapes: status codes, JSON fields (`error`, `message` where specified), **201 vs 200** idempotent POST, **409 conflict** body, and success payloads including `id`, `created_at` ISO string, nested `blueprint_data` (no `idempotency_key`).
+Tests MUST assert **exact** success and error shapes: status codes, JSON fields (`error`, `message` where specified), **201 vs 200** idempotent POST, **409 conflict** body, and success payloads including `id`, `created_at` ISO string, nested `blueprint_data` (no `idempotency_key`). **Integration:** assert **list row order** for `sort=name&order=asc` (two creates, names ordered ascending) and for `sort=created_at&order=asc` (two creates with measurable `created_at` difference, ascending timestamps); assert malformed JSON POST returns **400** with exact `error` / `message` above.
 
 ## Validation
 
@@ -82,7 +82,7 @@ Stateless API; single DB. Idempotency keys are global in `blueprints` table (cli
 
 1. **Invalid pagination or sort** — Bad `page`/`page_size`/`sort`/`order` → **400**, structured error.
 2. **DB connection failure** — Wrong URL or DB down → **503** structured (integration test with bad `DATABASE_URL`).
-3. **Malformed body or invalid `blueprint_data`** — **400**, no insert.
+3. **Malformed body or invalid `blueprint_data`** — Invalid JSON syntax → **400** `validation_error` / `Invalid JSON body`. Invalid shape (e.g. `blueprint_data` null) → **400** Zod message; no insert.
 4. **Idempotency key conflict (different body)** — **409** `conflict`, exact message above.
 5. **Concurrent POST same new idempotency key** — Unique index + P2002 handling; exactly one row; others **200** or **409**.
 

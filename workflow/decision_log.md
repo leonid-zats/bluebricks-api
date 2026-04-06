@@ -289,3 +289,148 @@ Related files
 
 - `assignments/bluebricks/workflow/validation.md`
 - `assignments/bluebricks/README.md`
+
+---
+
+## Decision: Product scope — Issue #63 (list sort integration + malformed JSON)
+
+Context
+
+Issue #63 asks for stronger integration coverage of list sorting (`sort=name` row order, `sort=created_at`), and for invalid JSON on POST to return **4xx** structured errors instead of **500** from Express body-parser.
+
+Options considered
+
+- Rely on status-only integration tests vs assert full row order.
+- Map all **400** `http-errors` to `validation_error` vs only body-parser JSON parse failures.
+
+Decision
+
+- **Integration tests** must assert **ascending order by `name`** for `sort=name&order=asc` and **ascending order by `created_at`** for `sort=created_at&order=asc` (two creates, short delay for timestamp separation).
+- **Malformed JSON** on POST: **400** with `{ "error": "validation_error", "message": "Invalid JSON body" }`.
+
+Rationale
+
+Matches issue #63 and Part 1 expectation that bad client input yields **4xx** with the same structured error shape as other validation failures.
+
+Trade-offs
+
+- `created_at` ordering test uses a small `setTimeout` to reduce flakiness from identical timestamps; still bounded and deterministic enough for CI.
+
+Impact
+
+`product_requirements_clarified.md` and downstream `requirements.md` / `plan.md` updated; implementation adds error detection + tests.
+
+Related files
+
+- `assignments/bluebricks/workflow/product_requirements_clarified.md`
+- `assignments/bluebricks/workflow/requirements.md`
+- `assignments/bluebricks/workflow/plan.md`
+
+---
+
+## Decision: Architecture — Issue #63 (body-parser errors + sort tests)
+
+Context
+
+Express `express.json()` delegates to body-parser; JSON syntax errors surface as **400** errors with `type: "entity.parse.failed"` before Zod runs. Integration tests previously did not assert ordering for explicit sort keys.
+
+Options considered
+
+- Custom JSON parser middleware replacing `express.json`.
+- **Detect body-parser error** in `blueprintErrorHandler` via `status` + `type` and map to app JSON contract.
+
+Decision
+
+- Keep `express.json({ limit: "2mb" })`; extend **`blueprintErrorHandler`** to recognize **`entity.parse.failed`** (and status **400**) and respond with **`validation_error` / `Invalid JSON body`**.
+- Add integration tests that filter list items by unique name prefix and assert order; use **~25ms** delay between creates for `created_at` test.
+
+Rationale
+
+Minimal change; no new dependencies; aligns with body-parser **2.x** error shape bundled with Express 5.
+
+Trade-offs
+
+- Detection relies on body-parser’s `type` string; if Express/body-parser changes the type, the unit test + integration test will fail visibly.
+
+Impact
+
+`src/errors.ts`, `src/routes/blueprintsRouter.ts`, integration + unit tests.
+
+Related files
+
+- `assignments/bluebricks/src/errors.ts`
+- `assignments/bluebricks/src/routes/blueprintsRouter.ts`
+- `assignments/bluebricks/tests/integration/api.test.ts`
+
+---
+
+## Decision: Validator — Issue #63 verification
+
+Context
+
+Validate Issue #63: integration ordering for `sort=name` and `sort=created_at`, and **400** structured response for malformed JSON on POST.
+
+Options considered
+
+- Re-run `docker compose build api` for this pass vs defer (Dockerfile unchanged).
+
+Decision
+
+- Ran `npm run test:unit`, `bash ci/gh-integration-verify.sh`, `npm run build`; all passed.
+- Fixed integration tests to use **`page_size=100`** (max allowed); initial **200** page size caused **400** and failed ordering tests.
+- Replaced `workflow/validation.md` with an Issue #63 report; updated README run/verify to include **`npm run build`** and current test counts.
+
+Rationale
+
+Evidence must match executed commands; `page_size` must respect the spec cap already enforced by Zod.
+
+Trade-offs
+
+- Did not re-run `docker compose build api` in this session (no Dockerfile change).
+
+Impact
+
+`workflow/validation.md` and `README.md` reflect Issue #63 validation.
+
+Related files
+
+- `assignments/bluebricks/workflow/validation.md`
+- `assignments/bluebricks/README.md`
+- `assignments/bluebricks/tests/integration/api.test.ts`
+
+---
+
+## Decision: Builder — Issue #63 implementation
+
+Context
+
+Implement clarified spec: structured **400** for invalid JSON; integration ordering assertions for `name` and `created_at` sorts.
+
+Options considered
+
+- Use `http-errors` `isHttpError` from a new dependency vs local `isMalformedJsonBodyError` predicate.
+
+Decision
+
+- Added **`isMalformedJsonBodyError`** in `src/errors.ts` checking **`status`/`statusCode` === 400** and **`type === "entity.parse.failed"`**.
+- **`blueprintErrorHandler`** handles it before Zod and before **500** fallback.
+- **`tests/unit/errors.test.ts`** covers the predicate; integration tests cover ordering + malformed JSON POST.
+
+Rationale
+
+Avoids adding `http-errors` as a direct dependency; predicate is narrow and testable.
+
+Trade-offs
+
+- Does not rewrite messages for other **400** errors from upstream middleware (only JSON parse failures).
+
+Impact
+
+Users sending broken JSON get consistent **validation_error** responses; CI proves list sort semantics for two keys.
+
+Related files
+
+- `assignments/bluebricks/src/errors.ts`
+- `assignments/bluebricks/src/routes/blueprintsRouter.ts`
+- `assignments/bluebricks/tests/unit/errors.test.ts`
+- `assignments/bluebricks/tests/integration/api.test.ts`
