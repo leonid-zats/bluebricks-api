@@ -1,4 +1,4 @@
-# Validation Report — Blueprint Manager API (`assignments/bluebricks`)
+# Validation Report — Blueprint Manager API (`assignments/bluebricks`) — Issue #61
 
 ## Score
 
@@ -6,9 +6,9 @@
 |----------|------:|----:|--------|
 | Requirements coverage | 25 | 25 | Architect |
 | Correctness & tests | 25 | 25 | Builder |
-| Reliability & systems thinking | 18 | 20 | Architect |
+| Reliability & systems thinking | 19 | 20 | Architect |
 | Code quality & maintainability | 14 | 15 | Builder |
-| Validation quality | 14 | 15 | Validator |
+| Validation quality | 15 | 15 | Validator |
 
 ### Bonuses
 
@@ -22,7 +22,7 @@
 
 ### Final Score
 
-**100 / 100** (category subtotal 96 + bonuses 8 = 104, clamped to 100)
+**100 / 100** (category subtotal 98 + bonuses 8 = 106, clamped to 100)
 
 ### Status
 
@@ -30,112 +30,115 @@
 
 ### Justification
 
-All routes, Flyway DDL, Docker/Compose layout, split tests, and `ci/gh-integration-verify.sh` match `workflow/requirements.md`. Unit and integration tests pass with exact status/body assertions for 400/404/503 cases. Reliability subsections in the spec are largely N/A for a synchronous CRUD service; failure-mode tests cover invalid query params, validation bodies, and DB connection refusal. No Context7 lookups were required (Express/pg/Zod usage is standard). `gh-integration-verify.sh` was executed successfully end-to-end in this environment.
+Prisma ORM, `IBlueprintRepository` + implementation, Flyway V2 `idempotency_key`, and `Idempotency-Key` semantics (201 / 200 / 409) match `workflow/requirements.md`. Unit tests (17) and integration tests (12) pass; `bash ci/gh-integration-verify.sh` and `docker compose build api` succeeded. Reliability subsections are filled with task-specific idempotency behavior; failure-mode tests map to named scenarios including idempotency conflict. No hard override: core contract and tests are green.
 
 ## Summary
 
-The Blueprint Manager API is implemented as an Express + `pg` service with Zod validation, Flyway migration `V1__create_blueprints.sql`, Docker Compose (`db`, one-shot `flyway`, `api`), Vitest unit and integration suites, and a GitHub Actions integration hook. Verification used local Docker Compose for Postgres and the Flyway Docker image.
+The service now uses **Prisma** against Flyway-managed tables, exposes the same CRUD routes, and implements **idempotent POST** via the **`Idempotency-Key`** header, **`idempotency_key`** column (unique when set), and **P2002** handling for concurrent creates. Public JSON omits `idempotency_key`.
 
 ## Checks performed
 
-- Read `workflow/requirements.md` against `src/**/*.ts`, `docker-compose.yml`, `Dockerfile`, tests, and scripts.
-- Ran `npm run test:unit`, `docker compose up -d db`, `npm run test:integration`, `docker compose down -v`.
-- Ran `bash ci/gh-integration-verify.sh` (full CI mirror).
-- Earlier in session: `npm run build`, `docker compose build api`.
+- Read `workflow/requirements.md` against `src/**/*.ts`, `prisma/schema.prisma`, `db/migration/V2__add_idempotency_key.sql`, `Dockerfile`, tests.
+- Ran `npm run test:unit` (cwd `assignments/bluebricks`).
+- Ran `bash ci/gh-integration-verify.sh` (Flyway validate + `npm ci` + integration tests + `docker compose down -v`).
+- Ran `docker compose build api`.
+- Confirmed `workflow/requirements.md` contains all five **Distributed systems & reliability** subsections and ≥3 task-specific failure scenarios under **### 5. Failure modes**; `workflow/plan.md` lists matching validation steps.
 
 ## Results
 
 | Requirement | Result |
 |-------------|--------|
-| POST/GET list/GET id/PUT/DELETE `/blueprints` | pass |
-| Pagination + `total`/`total_pages` | pass |
-| Sort `name`/`version`/`created_at`, default sort | pass |
-| Validation 400 JSON shape | pass |
-| 404 not found | pass |
-| Malformed id 400 | pass |
+| Prisma + `IBlueprintRepository` / `PrismaBlueprintRepository` | pass |
+| Flyway V2 + Prisma schema alignment | pass |
+| POST idempotency 200 / 201 / 409 | pass |
+| `idempotency_key` not in API JSON | pass |
+| List pagination, sort, validation 400 | pass |
+| GET/PUT/DELETE + malformed id 400 | pass |
 | Merge PUT | pass |
 | DELETE 204 | pass |
-| Flyway-only DDL | pass |
-| Compose postgres:16-alpine + API | pass |
-| Unit tests without DB | pass |
-| Integration + `bricks.json` | pass |
+| DB unavailable 503 (Prisma bad URL) | pass |
+| Unit + integration + `bricks.json` | pass |
 | `ci/gh-integration-verify.sh` | pass |
+| Docker API image build | pass |
 
 ## Fixes applied
 
-None (implementation met spec on first validation pass).
+None during this validation pass (implementation matched spec after Builder changes).
 
 ## Residual risks / deferred fixes
 
-- **Concurrent PUT** is documented in README but not covered by an automated race test (acceptable per plan).
-- **npm audit** reports moderate dev dependency advisories; not addressed (out of scope for functional task).
+- **Concurrent POST stress test** not run (logic relies on unique index + P2002); acceptable per plan.
+- **npm audit** moderate dev advisories unchanged (out of scope).
 
 ## Diff analysis
 
-- **Files changed:** 31 files under `assignments/bluebricks/` (see `git diff --cached --stat`: ~4527 insertions).
-- **Lines added/removed:** approximately +4527 / minimal deletions (new task implementation).
+- **Files changed:** edits under `assignments/bluebricks/` including new `prisma/`, `V2` migration, repository modules, Dockerfile, package files, workflow docs, tests; removed `src/db/pool.ts`, `BlueprintRepository.ts`.
+- **Lines added/removed:** see `git diff --stat assignments/bluebricks` (substantial net add for Prisma + idempotency).
 - **Unrelated files touched:** none
 
 **Assessment:**
 
 - **Changes are minimal and scoped to task:** yes
-- **Rationale:** All edits live under `assignments/bluebricks/` and implement issue #59 scope only.
+- **Rationale:** All changes implement Issue #61 (ORM, OOP, idempotent POST) within `assignments/bluebricks/`.
 
 ## Consistency checks (decision log + task README)
 
-- README **Implementation Summary**, **Key Decisions**, **Code Structure**, and **Run & Verify Locally** are present and align with `workflow/decision_log.md` and executed commands.
-- `workflow/plan.md` checklist items marked complete match delivered files.
+- README includes **Implementation Summary**, **Key Decisions**, **Code Structure**, **Run & Verify Locally** and matches executed commands below.
+- `workflow/decision_log.md` entries reference paths that exist in the tree.
 
 ## Evidence
 
 | Case | Input | Execution | Observed Output | Expected | Verdict | Mapping |
 |------|-------|-----------|-----------------|----------|---------|---------|
-| happy POST | `{ name, version, author, blueprint_data }` | `supertest` POST `/blueprints` | 201, body with numeric `id`, ISO `created_at` | per spec | pass | — |
-| invalid list query | `GET /blueprints?page=0` | integration | 400, `error: validation_error`, string `message` | Invalid pagination → 400 | pass | **Invalid pagination or sort query** (`workflow/requirements.md` §5 Failure modes) |
-| validation body | POST missing `author` | integration | 400, `validation_error`, message mentions author | Malformed body | pass | **Malformed body or invalid blueprint_data type** |
-| not found | `GET /blueprints/999999999` | integration | 404, `not_found`, fixed message | 404 JSON | pass | — |
-| DB down | Pool to closed port 65534 | `GET /blueprints` | 503, `service_unavailable` | DB unavailable | pass | **PostgreSQL connection failure** |
-| bricks fixture | `bricks.json` parsed | POST + GET list | create 201, list contains row | bricks in integration test | pass | — |
+| unit suite | — | `npm run test:unit` | 4 files, 17 tests passed | all pass | pass | — |
+| integration suite | — | `bash ci/gh-integration-verify.sh` → `npm run test:integration` | 1 file, 12 tests passed | all pass | pass | — |
+| idempotency replay | same `Idempotency-Key` + same body | `tests/integration/api.test.ts` | second response **200**, body equals first **201** | 200 replay | pass | Recovery / idempotent POST (`workflow/requirements.md` §1) |
+| idempotency conflict | same key, different `name` | integration | **409**, `{ "error": "conflict", "message": "Idempotency-Key already used with a different request body" }` | 409 conflict | pass | **Idempotency key conflict (different body)** |
+| invalid list | `GET /blueprints?page=0` | integration | **400**, `validation_error` | 400 | pass | **Invalid pagination or sort** |
+| DB down | Prisma URL port 65534 | integration | **503**, `service_unavailable` | 503 | pass | **DB connection failure** |
+| Docker API image | — | `docker compose build api` | build succeeded | image builds | pass | — |
 
 ## Failure-mode validation evidence
 
-- **Case:** Closed-port pool list request  
-- **Mapping:** PostgreSQL connection failure / DB unavailable (`workflow/requirements.md` §5 task-specific scenario)  
-- **Execution:** `tests/integration/api.test.ts` — “returns 503 when database refuses connection”  
-- **Observed Output:** status 503, body `{ "error": "service_unavailable", "message": "Database unavailable" }`  
+- **Case:** Idempotency conflict POST  
+- **Mapping:** **Idempotency key conflict (different body)** (`workflow/requirements.md` §5)  
+- **Execution:** `tests/integration/api.test.ts` — “POST with Idempotency-Key: different body returns 409”  
+- **Observed Output:** status **409**, body `{ "error": "conflict", "message": "Idempotency-Key already used with a different request body" }`  
 - **Verdict:** pass
 
 ## Environment limitations
 
-None in this run: Docker Compose and `docker compose build api` succeeded. If a future environment reports **network bridge not found** or similar nested-Docker errors, run **`post_agent_integration`** (`.github/workflows/cursor-label.yml`) after opening a PR so `assignments/bluebricks/ci/gh-integration-verify.sh` runs on GitHub-hosted runners, or run the README commands on a host with Docker.
+None in this run: Docker Compose, Flyway container, and `docker compose build api` succeeded. If nested Docker reports **bridge** errors, use workflow **Cursor - label trigger** job **`post_agent_integration`** to run `assignments/bluebricks/ci/gh-integration-verify.sh` on GitHub-hosted runners.
 
 ## Unverified
 
-Nothing material beyond optional load/concurrency stress (not required by spec).
+Optional high-concurrency idempotency stress (not required by spec).
 
 ## Context7 checks
 
-None (no version-sensitive API claims required external doc verification).
+| Claim | libraryId | Query topic | Outcome |
+|-------|-----------|-------------|---------|
+| Handle unique violations via `PrismaClientKnownRequestError` code **P2002** | `/prisma/prisma` | Known request error handling | pass (doc shows `error.code === 'P2002'`) |
 
 ## OOP/SOLID review
 
-`BlueprintRepository` isolates persistence; validation is split into small modules; router stays thin. Appropriate for task size without excessive layering.
+`IBlueprintRepository` isolates persistence; `PrismaBlueprintRepository` is a single-responsibility adapter; validation and payload comparison are small pure modules. Appropriate layering for task size.
 
 ## Anti-pattern findings
 
 - **Unnecessary abstractions:** none
 - **Dead code:** none
-- **Unused configs / env / deps:** none
+- **Unused configs / env / deps:** none (removed `pg` / `@types/pg`)
 
 ## Performance sanity findings
 
 **Checked:**
 
-- **N+1 queries:** none detected (list uses one count + one data query)
+- **N+1 queries:** none detected (list uses `findMany` + `count` in `$transaction`)
 - **Repeated heavy operations in loops:** none detected
 - **Unnecessary serialization / deserialization:** none detected
-- **Memory growth risks:** none detected (no unbounded caches)
+- **Memory growth risks:** none detected
 
 **Notes:**
 
-- JSON body limit `2mb` on `express.json` is intentional.
+- `express.json` limit `2mb` unchanged.

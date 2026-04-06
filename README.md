@@ -4,9 +4,9 @@ Assignment brief: see `requirements.md` in this folder and `workflow/requirement
 
 ## Stack
 
-- Node.js 18+, TypeScript, Express 5, `pg`, Zod  
+- Node.js 18+, TypeScript, Express 5, **Prisma** (`@prisma/client`), Zod  
 - PostgreSQL **16** (`postgres:16-alpine`)  
-- Schema: **Flyway** SQL in `db/migration/`  
+- Schema: **Flyway** SQL in `db/migration/` (source of truth); **`prisma/schema.prisma`** mirrors tables for the ORM (`npm run build` runs `prisma generate`)  
 - **Docker Compose**: `db`, one-shot `flyway`, and `api` (see `docker-compose.yml`)
 
 ## Environment
@@ -22,13 +22,15 @@ Default local URL when using Compose for the API: `http://localhost:3000`.
 
 Base path: `/blueprints`
 
-- `POST /blueprints` — create (201)  
+- `POST /blueprints` — create (**201**). Optional header **`Idempotency-Key`**: same key + same JSON body as an existing successful create → **200** with the same `id` / `created_at`; same key + different body → **409** `{ "error": "conflict", "message": "..." }`. Empty/whitespace key is ignored (normal create). Key max length **255** after trim.  
 - `GET /blueprints?page=&page_size=&sort=&order=` — list with pagination (`sort`: `name` \| `version` \| `created_at`; default order: `created_at DESC, id DESC`)  
 - `GET /blueprints/:id` — single (404 JSON if missing; 400 if id invalid)  
 - `PUT /blueprints/:id` — merge update  
 - `DELETE /blueprints/:id` — 204  
 
-Validation errors: **400** with `{ "error": "validation_error", "message": "..." }`. DB unreachable: **503** with `{ "error": "service_unavailable", "message": "Database unavailable" }`.
+Responses do **not** include the internal `idempotency_key` column.
+
+Validation errors: **400** with `{ "error": "validation_error", "message": "..." }`. Idempotency key too long: **400** `validation_error`. DB unreachable: **503** with `{ "error": "service_unavailable", "message": "Database unavailable" }`.
 
 ## Run with Docker Compose
 
@@ -81,34 +83,40 @@ After an issue-triggered agent run, workflow **Cursor - label trigger** (`.githu
 
 ## Implementation Summary
 
-The service is a small Express app with a `BlueprintRepository` using parameterized SQL. List queries are validated with Zod (`page`, `page_size` 1–100, optional `sort` / `order`); `ORDER BY` uses a fixed whitelist to avoid injection. `PUT` merges provided fields with the existing row without changing `created_at`. A global error handler maps Zod errors to 400, `HttpError` to configured statuses, and connection errors to 503.
+The service uses **Prisma** for all database access, with **`IBlueprintRepository`** implemented by **`PrismaBlueprintRepository`**. Flyway migration **`V2__add_idempotency_key.sql`** adds a nullable, uniquely indexed **`idempotency_key`** column. **`POST /blueprints`** reads the **`Idempotency-Key`** header: duplicate key with matching body returns **200** and the original row; duplicate key with a different body returns **409**. Concurrent creates with the same new key rely on the unique index and **P2002** handling. List queries use Prisma `orderBy` with fixed sort branches (no user-controlled SQL fragments). The **Dockerfile** copies **`prisma/`** before **`npm ci`** so `postinstall` can run `prisma generate`, and copies the generated **`.prisma`** engine from the build stage into the production image.
 
 ## Key Decisions
 
-- **Express + `pg` + Zod** instead of an ORM, to keep SQL explicit and dependencies small.  
-- **Merge semantics on PUT** per clarified product spec.  
-- **Compose `flyway` service** with `service_completed_successfully` so `docker compose up` applies migrations before the API starts.  
-- **Flyway via Docker** in `scripts/migrate-flyway.sh` and CI so the Flyway CLI does not need a host install.  
-- **`ci/gh-integration-verify.sh`** for `post_agent_integration` on GitHub-hosted runners.
+- **Prisma** as the ORM (issue #61); **Flyway** remains authoritative for DDL.  
+- **`IBlueprintRepository`** + **`PrismaBlueprintRepository`** for OOP boundaries.  
+- **Idempotency** via **`Idempotency-Key`** header + DB unique constraint + payload deep equality (`util.isDeepStrictEqual` on `blueprint_data`).  
+- **Public JSON omits `idempotency_key`.**  
+- **`ci/gh-integration-verify.sh`** unchanged contract; applies **V1 + V2** migrations on CI.  
 
 ## Code Structure
 
 | Path | Role |
 |------|------|
-| `src/server.ts` | HTTP server entry |
+| `prisma/schema.prisma` | Prisma model → `blueprints` table |
+| `src/db/prisma.ts` | `createPrismaClient` (optional URL override for tests) |
+| `src/repository/types.ts` | `BlueprintRow`, input types |
+| `src/repository/IBlueprintRepository.ts` | Persistence interface |
+| `src/repository/PrismaBlueprintRepository.ts` | Prisma implementation |
+| `src/repository/blueprintPayload.ts` | Idempotent body equality |
+| `src/validation/idempotencyKey.ts` | Parse / validate `Idempotency-Key` header |
+| `src/server.ts` | Prisma client, HTTP server, `$disconnect` on shutdown |
 | `src/app.ts` | Express app + JSON middleware |
-| `src/db/pool.ts` | `pg` pool from `DATABASE_URL` |
 | `src/errors.ts` | `HttpError` + JSON body helper |
 | `src/validation/listQuery.ts` | List query parsing (unit-tested) |
 | `src/validation/body.ts` | Create / merge body schemas |
-| `src/repository/BlueprintRepository.ts` | CRUD + list + count |
-| `src/serialization.ts` | Row → API JSON (`created_at` ISO) |
-| `src/routes/blueprintsRouter.ts` | Route handlers + error handler |
-| `db/migration/V1__create_blueprints.sql` | Flyway DDL |
+| `src/serialization.ts` | Row → API JSON (hides `idempotency_key`) |
+| `src/routes/blueprintsRouter.ts` | Routes, idempotent POST, error handler |
+| `db/migration/V1__create_blueprints.sql` | Initial DDL |
+| `db/migration/V2__add_idempotency_key.sql` | Idempotency column + unique index |
 | `scripts/migrate-flyway.sh` | Flyway migrate (Docker) |
 | `scripts/run-integration-tests.sh` | Flyway + Vitest integration |
 | `ci/gh-integration-verify.sh` | GitHub Actions integration hook |
-| `tests/unit/` | Validation unit tests |
+| `tests/unit/` | Validation + idempotency unit tests |
 | `tests/integration/api.test.ts` | HTTP + real Postgres |
 
 ## Run & Verify Locally
@@ -117,11 +125,8 @@ The service is a small Express app with a `BlueprintRepository` using parameteri
 cd assignments/bluebricks
 npm ci
 npm run test:unit
-docker compose up -d db
-npm run test:integration
-docker compose down -v
-npm run build
+bash ci/gh-integration-verify.sh
 docker compose build api
 ```
 
-Expected: unit tests pass; integration tests pass with DB up; TypeScript build succeeds; API image builds.
+Expected: unit tests pass; integration script runs Flyway (if needed), integration tests pass, Compose teardown succeeds; API image builds successfully.
