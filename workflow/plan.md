@@ -6,53 +6,56 @@
 
 ## Checklist
 
-### 1. Assets
+### 1. Database
 
-- [x] Add `bricks.json` matching assignment example `blueprint_data` shape (full document including `name`/`version`/`author` for test POST bodies as needed).
+- [x] Add `db/migration/V2__add_idempotency_key.sql`: column `idempotency_key VARCHAR(255) NULL`, **unique** index (Postgres allows multiple NULLs).
+- [x] Add `prisma/schema.prisma` with `Blueprint` model `@@map("blueprints")`, `idempotency_key String? @unique`.
 
-### 2. Database
+### 2. Dependencies & build
 
-- [x] Create `db/migration/V1__create_blueprints.sql`: table `blueprints`, indexes for `(created_at DESC, id DESC)` default listing and sort columns.
+- [x] Replace `pg` with `@prisma/client` + dev `prisma`; `postinstall` / `build` run `prisma generate`.
+- [x] `npm ci` updates `package-lock.json`.
 
-### 3. Application
+### 3. Application (OOP)
 
-- [x] `package.json` — dependencies: `express`, `pg`, `zod`; dev: `typescript`, `tsx`, `vitest`, `supertest`, `@types/*`.
-- [x] `tsconfig.json` — `outDir` `dist`, strict.
-- [x] `src/db/pool.ts` — `DATABASE_URL` → `Pool`.
-- [x] `src/validation/listQuery.ts` — parse `page`, `page_size`, `sort`, `order`; unit-tested; whitelist sort columns.
-- [x] `src/validation/body.ts` — Zod schemas for create / merge PUT; unit-tested.
-- [x] `src/repository/BlueprintRepository.ts` — CRUD + count + list with parameterized `LIMIT`/`OFFSET` and safe `ORDER BY`.
-- [x] `src/routes/blueprintsRouter.ts` — wire HTTP to repository; map errors to status codes.
-- [x] `src/app.ts` — express json, mount router at `/blueprints`.
-- [x] `src/server.ts` — start server (port from `PORT` env).
+- [x] `src/repository/types.ts` — `BlueprintRow` including `idempotency_key` (internal).
+- [x] `src/repository/IBlueprintRepository.ts` — interface for CRUD + `findByIdempotencyKey`.
+- [x] `src/repository/PrismaBlueprintRepository.ts` — Prisma implementation; whitelist sort via Prisma `orderBy`.
+- [x] `src/repository/blueprintPayload.ts` — `isSameCreatePayload` (deep compare `blueprint_data`).
+- [x] `src/validation/idempotencyKey.ts` — parse/validate `Idempotency-Key` header.
+- [x] `src/db/prisma.ts` — `createPrismaClient(optionalUrl?)` for tests.
+- [x] `src/routes/blueprintsRouter.ts` — POST idempotency (pre-check, P2002 retry), inject `PrismaClient`.
+- [x] `src/serialization.ts` — **omit** `idempotency_key` from public JSON.
+- [x] `src/app.ts` — `createApp(prisma)`.
+- [x] `src/server.ts` — Prisma lifecycle + listen.
+- [x] Remove `src/db/pool.ts`, `BlueprintRepository.ts` (`pg`).
 
 ### 4. Docker
 
-- [x] `Dockerfile` — multi-stage or simple: `npm ci`, `build`, `node dist/server.js`.
-- [x] `docker-compose.yml` — services `db` (`postgres:16-alpine`), one-shot `flyway` (`flyway/flyway:10-alpine`), `api` (build; depends on `flyway` completed successfully).
+- [x] `Dockerfile` — copy `prisma/` before `npm ci`; production stage copy `.prisma` from build; `npm run build` in build stage.
 
 ### 5. Tests
 
-- [x] `tests/unit/` — list query parser, body validation, error shapes.
-- [x] `tests/integration/` — spin pool against `DATABASE_URL`, run migrations via **Flyway CLI** in `beforeAll` (subprocess) or document test setup script; use `supertest` against `app` without separate listen; cover: create, get, list pagination+sort, update merge, delete, 404s, validation 400s, malformed id 400; **one test loads `bricks.json`** for create/list.
+- [x] Unit: `blueprintPayload.test.ts`, `idempotencyKey.test.ts`; keep list/body tests.
+- [x] Integration: idempotent POST **200** replay, **409** conflict; DB 503 with Prisma bad URL; update imports from pool → prisma.
 
 ### 6. CI hook
 
-- [x] `ci/gh-integration-verify.sh` — `docker compose up -d db`, wait healthy, Flyway migrate (container or compose profile), `npm ci`, `npm run test:integration`, `docker compose down -v`.
+- [x] `ci/gh-integration-verify.sh` unchanged behavior (Flyway applies V2).
 
-### 7. Docs
+### 7. Docs & workflow
 
-- [x] `README.md` — prerequisites, `docker compose up --build`, env vars, `npm run test:unit` / `test:integration`, pointer to `.github/workflows/cursor-label.yml` job **`post_agent_integration`** and `ci/gh-integration-verify.sh`.
-- [x] `workflow/validation.md` — filled by Builder/Validator with evidence.
+- [x] `workflow/product_requirements_clarified.md`, `workflow/requirements.md`, `workflow/plan.md`, `workflow/decision_log.md`, `workflow/validation.md`, `README.md` — idempotency, Prisma, interface.
 
 ### 8. Failure-mode validation (trace to requirements)
 
-- [x] **Invalid pagination/sort** — unit test: bad params → throws or result that maps to 400; integration: `GET /blueprints?page=0` → 400.
-- [x] **Malformed body** — integration: POST missing `author` → 400 with `error`/`message`.
-- [x] **DB unavailable** — integration optional: if feasible, assert 503/500 when pool cannot connect (or document manual); minimum: unit/repository test skipped with note OR stop DB mid-test only if stable; **Validator** records actual approach.
-- [x] **Concurrent PUT** — document in README; optional single test not required if documented.
+- [x] **Invalid pagination/sort** — integration `GET ?page=0` → 400.
+- [x] **Malformed body** — POST missing `author` → 400.
+- [x] **DB unavailable** — Prisma client with bad port → 503.
+- [x] **Idempotency conflict** — integration second POST same key different body → **409** exact body.
+- [x] **Idempotency replay** — integration same key same body → **200**, same `id`.
 
 ## Assumptions to validate
 
-- Flyway CLI available in CI via official `flyway/flyway` Docker image (same as local hook).
-- GitHub runner allows Docker Compose (not nested daemon).
+- Prisma `P2002` `meta.target` includes `idempotency_key` for unique violations (router handles array or string).
+- Flyway remains source of truth; Prisma schema hand-maintained to match migrations.
