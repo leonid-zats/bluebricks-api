@@ -12,7 +12,7 @@ Deliver a **Node.js + TypeScript** HTTP service that persists Blueprints in **Po
 4. **`docker-compose.yml`** (or `compose.yaml`) with `db` (pinned Postgres) and `api` (build from Dockerfile).
 5. **`assignments/bluebricks/ci/gh-integration-verify.sh`** — idempotent: start Postgres (via Compose), run Flyway, `npm ci`, `npm run test:integration`, tear down.
 6. **Unit tests** — no database; validation, pagination/sort parsing, error formatting, DTO mapping, **idempotency body comparison** if extracted as pure logic.
-7. **Integration tests** — real PostgreSQL + Flyway-applied schema; HTTP-level tests; cover CRUD, pagination, sorting, 404, validation, **idempotent POST** (same key + same body → **200** on replay; same key + different body → **409**); at least one test uses `bricks.json` for create/list.
+7. **Integration tests** — real PostgreSQL + Flyway-applied schema; HTTP-level tests; cover CRUD, pagination, sorting, 404, validation, **idempotent POST** (same key + same body → **200** on replay; same key + different body → **409**); at least one test uses `bricks.json` for create/list. **Sorting integration coverage:** at least one test MUST assert **row order** for `sort=name&order=asc` (two created rows with distinct names, ascending order verified on `name`), and at least one test MUST assert **row order** for `sort=created_at&order=asc` (two creates separated by a short wall-clock delay so `created_at` differs; ascending order verified on `created_at` timestamps and names).
 8. **Task README** with run/verify, reference to **`post_agent_integration`** / `assignments/bluebricks/ci/gh-integration-verify.sh`.
 9. **OOP:** A **`IBlueprintRepository`** (or equivalent) interface describing persistence operations; a **Prisma-backed implementation** class used by the HTTP layer (dependency injection at router/app construction).
 
@@ -44,6 +44,7 @@ Indexes/migration must support efficient default list sort: **`created_at DESC, 
 - **Replay:** Same non-empty `Idempotency-Key` as a previous **successful** create, and **equivalent** body (`name`, `version`, `author`, and deep-equal `blueprint_data`): **200** with the **same** stored resource representation (same `id` and `created_at` as the original row).
 - **Conflict:** Same `Idempotency-Key` as an existing row but **non-equivalent** body: **409** with JSON `{ "error": "conflict", "message": "<human-readable>" }`.
 - **Validation failure:** **400** with JSON `{ "error": "<short_code>", "message": "<human-readable>" }`.
+- **Malformed JSON body** (syntactically invalid JSON with `Content-Type: application/json`): **400** with JSON `{ "error": "validation_error", "message": "Invalid JSON body" }` — not **500** `internal_error`.
 - **Concurrency:** Two parallel first requests with the same new key: exactly one insert succeeds; the other must **not** create a duplicate row and must return **200** with the winner’s row if the body matches, or **409** if the body does not match the stored row.
 
 #### `GET /blueprints`
@@ -143,9 +144,9 @@ Indexes/migration must support efficient default list sort: **`created_at DESC, 
    - **Mitigation:** Map ORM connection errors globally.
 
 3. **Malformed JSON body or wrong `blueprint_data` type**  
-   - **Trigger:** `blueprint_data: null` or array on POST.  
-   - **Expected:** **400** with clear message; no row inserted.  
-   - **Mitigation:** Schema validation in handler.
+   - **Trigger:** (a) Request body is not valid JSON (e.g. truncated `{`), or (b) `blueprint_data: null` or array on POST.  
+   - **Expected:** **400** with structured `validation_error` (invalid JSON: fixed message `Invalid JSON body`; schema violations: Zod-derived message); no row inserted.  
+   - **Mitigation:** Catch `express.json` / body-parser parse failures before route handlers; Zod schema validation in handler.
 
 4. **Idempotency key conflict (different body)**  
    - **Trigger:** Reuse `Idempotency-Key` with altered `name`/`version`/`author`/`blueprint_data`.  
@@ -160,7 +161,7 @@ Indexes/migration must support efficient default list sort: **`created_at DESC, 
 ## Testing requirements
 
 - **Unit:** No Docker; fast; include list/body validation as today; optional pure helper for payload equality used by idempotency.
-- **Integration:** Real Postgres + Flyway; `bricks.json` used in ≥1 test; **exact** HTTP contract tests for **201/200/409** idempotency paths and **409** body shape.
+- **Integration:** Real Postgres + Flyway; `bricks.json` used in ≥1 test; **exact** HTTP contract tests for **201/200/409** idempotency paths and **409** body shape; **assert list ordering** for `sort=name` and `sort=created_at` as specified above; **assert malformed JSON POST** returns **400** with exact `error` / `message` above.
 - **Exact contract tests:** Assert HTTP status, JSON body fields for success and error paths.
 
 ## Non-goals

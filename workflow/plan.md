@@ -51,9 +51,17 @@
 
 - [x] **Invalid pagination/sort** — integration `GET ?page=0` → 400.
 - [x] **Malformed body** — POST missing `author` → 400.
+- [x] **Malformed JSON** — integration POST invalid JSON string → **400** `{ "error": "validation_error", "message": "Invalid JSON body" }`; unit test for `isMalformedJsonBodyError` (body-parser error shape).
 - [x] **DB unavailable** — Prisma client with bad port → 503.
 - [x] **Idempotency conflict** — integration second POST same key different body → **409** exact body.
 - [x] **Idempotency replay** — integration same key same body → **200**, same `id`.
+
+### 9. Issue #63 — list sort integration + JSON errors
+
+- [x] `src/errors.ts` — `isMalformedJsonBodyError` (detect `status` 400 + `type` `entity.parse.failed` from body-parser).
+- [x] `src/routes/blueprintsRouter.ts` — `blueprintErrorHandler` returns structured **400** for malformed JSON before generic **500**.
+- [x] `tests/integration/api.test.ts` — assert **name** order for `sort=name&order=asc`; assert **created_at** order for `sort=created_at&order=asc` (two posts + short delay).
+- [x] `tests/unit/errors.test.ts` — unit tests for parse-failure detection.
 
 ## Assumptions to validate
 

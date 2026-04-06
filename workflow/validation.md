@@ -1,4 +1,4 @@
-# Validation Report — Blueprint Manager API (`assignments/bluebricks`) — Issue #61
+# Validation Report — Blueprint Manager API (`assignments/bluebricks`) — Issue #63
 
 ## Score
 
@@ -6,8 +6,8 @@
 |----------|------:|----:|--------|
 | Requirements coverage | 25 | 25 | Architect |
 | Correctness & tests | 25 | 25 | Builder |
-| Reliability & systems thinking | 19 | 20 | Architect |
-| Code quality & maintainability | 14 | 15 | Builder |
+| Reliability & systems thinking | 20 | 20 | Architect |
+| Code quality & maintainability | 15 | 15 | Builder |
 | Validation quality | 15 | 15 | Validator |
 
 ### Bonuses
@@ -22,7 +22,7 @@
 
 ### Final Score
 
-**100 / 100** (category subtotal 98 + bonuses 8 = 106, clamped to 100)
+**100 / 100** (category subtotal 100 + bonuses 8 = 108, clamped to 100)
 
 ### Status
 
@@ -30,115 +30,112 @@
 
 ### Justification
 
-Prisma ORM, `IBlueprintRepository` + implementation, Flyway V2 `idempotency_key`, and `Idempotency-Key` semantics (201 / 200 / 409) match `workflow/requirements.md`. Unit tests (17) and integration tests (12) pass; `bash ci/gh-integration-verify.sh` and `docker compose build api` succeeded. Reliability subsections are filled with task-specific idempotency behavior; failure-mode tests map to named scenarios including idempotency conflict. No hard override: core contract and tests are green.
+Issue #63 is addressed: integration tests now assert **list ordering** for `sort=name&order=asc` and `sort=created_at&order=asc`, and **malformed JSON** on `POST /blueprints` returns **400** with `{ "error": "validation_error", "message": "Invalid JSON body" }` instead of **500**. Ran `npm run test:unit` (5 files, 20 tests), `bash ci/gh-integration-verify.sh` (integration: 1 file, 14 tests), and `npm run build`; all succeeded. `workflow/requirements.md` still contains the five **Distributed systems & reliability** subsections and task-specific **Failure modes**; `plan.md` lists validation steps including malformed JSON and sort ordering. No hard override.
 
 ## Summary
 
-The service now uses **Prisma** against Flyway-managed tables, exposes the same CRUD routes, and implements **idempotent POST** via the **`Idempotency-Key`** header, **`idempotency_key`** column (unique when set), and **P2002** handling for concurrent creates. Public JSON omits `idempotency_key`.
+This pass validates **Issue #63** on top of the existing Blueprint API: **`isMalformedJsonBodyError`** maps body-parser JSON parse failures (`type: "entity.parse.failed"`, status **400**) to the same structured **`validation_error`** shape as Zod failures. Integration tests create two rows with distinct **`name`** prefixes and assert ascending order; a second test uses a **25ms** delay between creates and asserts ascending **`created_at`** for `sort=created_at&order=asc`.
 
 ## Checks performed
 
-- Read `workflow/requirements.md` against `src/**/*.ts`, `prisma/schema.prisma`, `db/migration/V2__add_idempotency_key.sql`, `Dockerfile`, tests.
+- Read `workflow/requirements.md` (including §5 **Failure modes**) against `src/errors.ts`, `src/routes/blueprintsRouter.ts`, `tests/integration/api.test.ts`, `tests/unit/errors.test.ts`.
+- Confirmed `workflow/plan.md` includes Issue #63 checklist items for JSON errors and sort integration.
 - Ran `npm run test:unit` (cwd `assignments/bluebricks`).
-- Ran `bash ci/gh-integration-verify.sh` (Flyway validate + `npm ci` + integration tests + `docker compose down -v`).
-- Ran `docker compose build api`.
-- Confirmed `workflow/requirements.md` contains all five **Distributed systems & reliability** subsections and ≥3 task-specific failure scenarios under **### 5. Failure modes**; `workflow/plan.md` lists matching validation steps.
+- Ran `bash ci/gh-integration-verify.sh` (Postgres via Compose, Flyway, `npm ci`, `npm run test:integration` with `SKIP_FLYWAY_INTEGRATION=1`, teardown).
+- Ran `npm run build`.
 
 ## Results
 
 | Requirement | Result |
 |-------------|--------|
-| Prisma + `IBlueprintRepository` / `PrismaBlueprintRepository` | pass |
-| Flyway V2 + Prisma schema alignment | pass |
-| POST idempotency 200 / 201 / 409 | pass |
-| `idempotency_key` not in API JSON | pass |
-| List pagination, sort, validation 400 | pass |
-| GET/PUT/DELETE + malformed id 400 | pass |
-| Merge PUT | pass |
-| DELETE 204 | pass |
-| DB unavailable 503 (Prisma bad URL) | pass |
-| Unit + integration + `bricks.json` | pass |
+| Integration: assert **name** order for `sort=name&order=asc` | pass |
+| Integration: assert **created_at** order for `sort=created_at&order=asc` | pass |
+| Malformed JSON POST → **400** `validation_error` / `Invalid JSON body` | pass |
+| Unit: `isMalformedJsonBodyError` predicate | pass |
+| Existing CRUD, idempotency, list validation, DB 503 | pass (regression) |
 | `ci/gh-integration-verify.sh` | pass |
-| Docker API image build | pass |
 
 ## Fixes applied
 
-None during this validation pass (implementation matched spec after Builder changes).
+- **Validator:** Initial integration draft used `page_size=200`, which violates the spec max **100** and caused **400**; corrected to **`page_size=100`** in `tests/integration/api.test.ts` before the final verify run.
 
 ## Residual risks / deferred fixes
 
-- **Concurrent POST stress test** not run (logic relies on unique index + P2002); acceptable per plan.
-- **npm audit** moderate dev advisories unchanged (out of scope).
+- **`created_at` ordering test** depends on a **25ms** wall-clock gap; extremely slow or frozen clocks could theoretically make timestamps identical (unlikely on CI).
+- **npm audit** moderate advisories unchanged (out of scope).
 
 ## Diff analysis
 
-- **Files changed:** edits under `assignments/bluebricks/` including new `prisma/`, `V2` migration, repository modules, Dockerfile, package files, workflow docs, tests; removed `src/db/pool.ts`, `BlueprintRepository.ts`.
-- **Lines added/removed:** see `git diff --stat assignments/bluebricks` (substantial net add for Prisma + idempotency).
+- **Files changed:** `assignments/bluebricks/src/errors.ts`, `src/routes/blueprintsRouter.ts`, `tests/integration/api.test.ts`, `tests/unit/errors.test.ts` (new), `workflow/product_requirements_clarified.md`, `workflow/requirements.md`, `workflow/plan.md`, `workflow/decision_log.md`, `workflow/validation.md`, `README.md`.
+- **Lines added/removed:** `git diff --stat` on final tree: **9 files, +307 −62** (includes new `errors.test.ts` and full workflow/README refresh).
 - **Unrelated files touched:** none
 
 **Assessment:**
 
 - **Changes are minimal and scoped to task:** yes
-- **Rationale:** All changes implement Issue #61 (ORM, OOP, idempotent POST) within `assignments/bluebricks/`.
+- **Rationale:** All edits stay under `assignments/bluebricks/` and implement Issue #63 (sort integration assertions + malformed JSON handling) plus workflow documentation.
 
 ## Consistency checks (decision log + task README)
 
-- README includes **Implementation Summary**, **Key Decisions**, **Code Structure**, **Run & Verify Locally** and matches executed commands below.
-- `workflow/decision_log.md` entries reference paths that exist in the tree.
+- README **Run & Verify Locally** matches commands executed below (`npm run test:unit`, `bash ci/gh-integration-verify.sh`, `npm run build`).
+- **Implementation Summary** / **Key Decisions** / **Code Structure** updated for Issue #63.
+- `workflow/decision_log.md` Issue #63 entries reference paths that exist.
 
 ## Evidence
 
 | Case | Input | Execution | Observed Output | Expected | Verdict | Mapping |
 |------|-------|-----------|-----------------|----------|---------|---------|
-| unit suite | — | `npm run test:unit` | 4 files, 17 tests passed | all pass | pass | — |
-| integration suite | — | `bash ci/gh-integration-verify.sh` → `npm run test:integration` | 1 file, 12 tests passed | all pass | pass | — |
-| idempotency replay | same `Idempotency-Key` + same body | `tests/integration/api.test.ts` | second response **200**, body equals first **201** | 200 replay | pass | Recovery / idempotent POST (`workflow/requirements.md` §1) |
-| idempotency conflict | same key, different `name` | integration | **409**, `{ "error": "conflict", "message": "Idempotency-Key already used with a different request body" }` | 409 conflict | pass | **Idempotency key conflict (different body)** |
-| invalid list | `GET /blueprints?page=0` | integration | **400**, `validation_error` | 400 | pass | **Invalid pagination or sort** |
-| DB down | Prisma URL port 65534 | integration | **503**, `service_unavailable` | 503 | pass | **DB connection failure** |
-| Docker API image | — | `docker compose build api` | build succeeded | image builds | pass | — |
+| unit suite | — | `npm run test:unit` | 5 files, **20** tests passed | all pass | pass | — |
+| integration via CI hook | — | `bash ci/gh-integration-verify.sh` | Flyway up to date; **14** integration tests passed | all pass | pass | — |
+| sort by name | Two POSTs `sort63_*_z` then `sort63_*_a`; `GET sort=name&order=asc&page_size=100` | `tests/integration/api.test.ts` | Filtered items length 2; first `*_a`, second `*_z` | ascending name | pass | — |
+| sort by created_at | Two POSTs with 25ms delay; `GET sort=created_at&order=asc&page_size=100` | `tests/integration/api.test.ts` | `*_first` before `*_second`; parsed `created_at` increasing | ascending time | pass | — |
+| malformed JSON POST | Body `{not-json`, `Content-Type: application/json` | `tests/integration/api.test.ts` | **400** `{ "error": "validation_error", "message": "Invalid JSON body" }` | structured 4xx | pass | **Malformed body or invalid blueprint_data** (invalid JSON branch) |
+| invalid list | `GET /blueprints?page=0` | integration | **400** `validation_error` | 400 | pass | **Invalid pagination or sort** |
+| DB down | Prisma URL port 65534 | integration | **503** `service_unavailable` | 503 | pass | **DB connection failure** |
+| build | — | `npm run build` | `tsc` success | compiles | pass | — |
 
 ## Failure-mode validation evidence
 
-- **Case:** Idempotency conflict POST  
-- **Mapping:** **Idempotency key conflict (different body)** (`workflow/requirements.md` §5)  
-- **Execution:** `tests/integration/api.test.ts` — “POST with Idempotency-Key: different body returns 409”  
-- **Observed Output:** status **409**, body `{ "error": "conflict", "message": "Idempotency-Key already used with a different request body" }`  
+- **Case:** Malformed JSON on POST  
+- **Mapping:** **Malformed body or invalid `blueprint_data`** — invalid JSON syntax branch (`workflow/requirements.md` §5)  
+- **Execution:** `tests/integration/api.test.ts` — “POST 400 when body is not valid JSON”  
+- **Observed Output:** status **400**, body `{ "error": "validation_error", "message": "Invalid JSON body" }`  
 - **Verdict:** pass
 
 ## Environment limitations
 
-None in this run: Docker Compose, Flyway container, and `docker compose build api` succeeded. If nested Docker reports **bridge** errors, use workflow **Cursor - label trigger** job **`post_agent_integration`** to run `assignments/bluebricks/ci/gh-integration-verify.sh` on GitHub-hosted runners.
+None in this run: Docker Compose, Flyway container, and integration hook completed successfully. If a Cloud Agent hits **bridge** / nested Docker errors, workflow **Cursor - label trigger** job **`post_agent_integration`** runs `assignments/bluebricks/ci/gh-integration-verify.sh` on GitHub-hosted runners.
 
 ## Unverified
 
-Optional high-concurrency idempotency stress (not required by spec).
+- Optional high-concurrency idempotency stress (not required by spec).
+- `docker compose build api` not re-run in this Issue #63 validation session (unchanged Dockerfile).
 
 ## Context7 checks
 
 | Claim | libraryId | Query topic | Outcome |
 |-------|-----------|-------------|---------|
-| Handle unique violations via `PrismaClientKnownRequestError` code **P2002** | `/prisma/prisma` | Known request error handling | pass (doc shows `error.code === 'P2002'`) |
+| Express 5 / body-parser JSON parse errors | — | — | **Not verified via Context7**; verified against installed **body-parser** (via `express.json`): parse failures call `next(createError(400, err, { type: 'entity.parse.failed' }))` in `node_modules/body-parser/lib/read.js`. |
 
 ## OOP/SOLID review
 
-`IBlueprintRepository` isolates persistence; `PrismaBlueprintRepository` is a single-responsibility adapter; validation and payload comparison are small pure modules. Appropriate layering for task size.
+`isMalformedJsonBodyError` is a small pure predicate; error handling remains centralized in `blueprintErrorHandler`. No unnecessary new layers.
 
 ## Anti-pattern findings
 
 - **Unnecessary abstractions:** none
 - **Dead code:** none
-- **Unused configs / env / deps:** none (removed `pg` / `@types/pg`)
+- **Unused configs / env / deps:** none
 
 ## Performance sanity findings
 
 **Checked:**
 
-- **N+1 queries:** none detected (list uses `findMany` + `count` in `$transaction`)
+- **N+1 queries:** none detected (unchanged list path)
 - **Repeated heavy operations in loops:** none detected
 - **Unnecessary serialization / deserialization:** none detected
 - **Memory growth risks:** none detected
 
 **Notes:**
 
-- `express.json` limit `2mb` unchanged.
+- New integration tests add a few HTTP round-trips per run; acceptable for CI.
