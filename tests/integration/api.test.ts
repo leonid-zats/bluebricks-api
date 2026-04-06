@@ -4,14 +4,15 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { execSync } from "node:child_process";
-import { createPool } from "../../src/db/pool.js";
+import { createPrismaClient } from "../../src/db/prisma.js";
 import { createApp } from "../../src/app.js";
+import type { PrismaClient } from "@prisma/client";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const bricksPath = path.join(__dirname, "../../bricks.json");
 
 describe("Blueprint API (integration)", () => {
-  let pool: ReturnType<typeof createPool>;
+  let prisma: PrismaClient;
   let app: ReturnType<typeof createApp>;
 
   beforeAll(() => {
@@ -25,12 +26,12 @@ describe("Blueprint API (integration)", () => {
         env: { ...process.env },
       });
     }
-    pool = createPool();
-    app = createApp(pool);
+    prisma = createPrismaClient();
+    app = createApp(prisma);
   });
 
   afterAll(async () => {
-    await pool.end();
+    await prisma.$disconnect();
   });
 
   it("POST 201 returns id and created_at", async () => {
@@ -130,6 +131,56 @@ describe("Blueprint API (integration)", () => {
     await request(app).get(`/blueprints/${id}`).expect(404);
   });
 
+  it("POST with Idempotency-Key: replay same body returns 200 and same id", async () => {
+    const key = `idem-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const payload = {
+      name: "idem_test",
+      version: "1.0.0",
+      author: "idem@example.com",
+      blueprint_data: { x: 1 },
+    };
+    const first = await request(app)
+      .post("/blueprints")
+      .set("Idempotency-Key", key)
+      .send(payload)
+      .expect(201);
+    const second = await request(app)
+      .post("/blueprints")
+      .set("Idempotency-Key", key)
+      .send(payload)
+      .expect(200);
+    expect(second.body).toEqual(first.body);
+    expect(second.body.id).toBe(first.body.id);
+  });
+
+  it("POST with Idempotency-Key: different body returns 409", async () => {
+    const key = `idem-conflict-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await request(app)
+      .post("/blueprints")
+      .set("Idempotency-Key", key)
+      .send({
+        name: "a",
+        version: "1",
+        author: "a@b.c",
+        blueprint_data: {},
+      })
+      .expect(201);
+    const res = await request(app)
+      .post("/blueprints")
+      .set("Idempotency-Key", key)
+      .send({
+        name: "b",
+        version: "1",
+        author: "a@b.c",
+        blueprint_data: {},
+      })
+      .expect(409);
+    expect(res.body).toEqual({
+      error: "conflict",
+      message: "Idempotency-Key already used with a different request body",
+    });
+  });
+
   it("uses bricks.json for create and list", async () => {
     const raw = readFileSync(bricksPath, "utf-8");
     const doc = JSON.parse(raw) as {
@@ -150,17 +201,13 @@ describe("Blueprint API (integration)", () => {
 
 describe("Blueprint API DB unavailable", () => {
   it("returns 503 when database refuses connection", async () => {
-    const pg = await import("pg");
-    const pool = new pg.default.Pool({
-      connectionString: "postgresql://blueprint:blueprint@127.0.0.1:65534/blueprints",
-      connectionTimeoutMillis: 3000,
-    });
-    const app = createApp(pool);
+    const badPrisma = createPrismaClient("postgresql://blueprint:blueprint@127.0.0.1:65534/blueprints");
+    const app = createApp(badPrisma);
     const res = await request(app).get("/blueprints").expect(503);
     expect(res.body).toEqual({
       error: "service_unavailable",
       message: "Database unavailable",
     });
-    await pool.end();
+    await badPrisma.$disconnect();
   });
 });

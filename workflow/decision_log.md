@@ -142,3 +142,150 @@ Validation report reflects actual command output from the final test run.
 Related files
 
 - `assignments/bluebricks/workflow/validation.md`
+
+---
+
+## Decision: Product scope — Issue #61 (ORM, OOP, idempotent POST)
+
+Context
+
+GitHub issue #61 requests the `bluebricks` task folder, preference for an ORM, improved OOP (interfaces/classes), and an idempotent POST handler.
+
+Options considered
+
+- **Idempotency:** Header `Idempotency-Key` vs body field — header matches common HTTP practice and keeps `bricks.json` unchanged.
+- **ORM:** Prisma vs TypeORM vs Kysely — Prisma fits TypeScript + Postgres with generated types and clear unique-constraint errors for races.
+
+Decision
+
+- Add **Flyway V2** `idempotency_key` column with **unique** partial semantics via unique index on nullable column.
+- **POST** accepts optional **`Idempotency-Key`**: same key + same body → **200**; different body → **409** `conflict`; handle **P2002** on concurrent creates.
+- **ORM:** **Prisma**; **OOP:** **`IBlueprintRepository`** + **`PrismaBlueprintRepository`**.
+- Public JSON **must not** expose `idempotency_key`.
+
+Rationale
+
+Matches issue notes while keeping Flyway as schema source of truth and preserving existing HTTP list/merge semantics.
+
+Trade-offs
+
+- Prisma adds code generation and Docker copy steps; idempotency adds one column and conflict paths to test.
+
+Impact
+
+`workflow/product_requirements_clarified.md` and downstream `requirements.md` / `plan.md` updated; implementation migrates from raw `pg` to Prisma.
+
+Related files
+
+- `assignments/bluebricks/workflow/product_requirements_clarified.md`
+- `assignments/bluebricks/db/migration/V2__add_idempotency_key.sql`
+- `assignments/bluebricks/prisma/schema.prisma`
+
+---
+
+## Decision: Architecture — Prisma + repository interface (Issue #61)
+
+Context
+
+Issue #61 asks for ORM and clearer OOP boundaries while keeping the existing REST contract and Flyway ownership.
+
+Options considered
+
+- **Stay on `pg`:** Rejected — issue explicitly prefers ORM.
+- **TypeORM:** Rejected — heavier runtime reflection pattern; Prisma’s schema + client fit this small service.
+- **Idempotency in application only (no DB constraint):** Rejected — races could create duplicate rows; unique index + P2002 handling is required.
+
+Decision
+
+- **Prisma Client** with `prisma/schema.prisma` mirroring Flyway.
+- **`IBlueprintRepository`** defines persistence; router depends on **`PrismaClient`** composed with **`PrismaBlueprintRepository`** (could inject interface later; constructor takes `PrismaClient` for simplicity).
+- **Sort safety:** Prisma `orderBy` with fixed branches (no raw user strings in SQL).
+
+Rationale
+
+Single-process API; Prisma maps connection errors to **503** alongside legacy `ECONNREFUSED` checks; unique violations detect idempotency races.
+
+Trade-offs
+
+- Two schema sources (Flyway + Prisma) must be kept in sync manually for this task.
+
+Impact
+
+All DB access goes through Prisma; Dockerfile copies `prisma/` before `npm ci` so `postinstall` succeeds.
+
+Related files
+
+- `assignments/bluebricks/src/repository/IBlueprintRepository.ts`
+- `assignments/bluebricks/src/repository/PrismaBlueprintRepository.ts`
+- `assignments/bluebricks/src/db/prisma.ts`
+
+---
+
+## Decision: Builder — Prisma migration and idempotent POST
+
+Context
+
+Implement Issue #61 on branch `cursor/bluebricks-implementation-details-b3bb`.
+
+Options considered
+
+- **Transaction with advisory lock per key:** Rejected — unique index + retry read is simpler and matches spec.
+- **`prisma db push` in CI:** Rejected — Flyway remains authoritative; only `prisma generate` in build.
+
+Decision
+
+- Removed **`pg`** pool/repository; added Prisma models, **`isSameCreatePayload`** using `util.isDeepStrictEqual` for JSONB comparison.
+- Router: pre-insert lookup by key; on **P2002**, re-fetch by key and compare payload.
+- Dockerfile: copy **`prisma/`** before **`npm ci`** in both stages; copy **`node_modules/.prisma`** from build to runtime.
+
+Rationale
+
+Meets contract tests and Docker build; integration tests cover 200 replay, 409 conflict, 503 bad DB URL.
+
+Trade-offs
+
+- `postinstall` always runs `prisma generate` (requires `prisma` schema present after clone — satisfied by repo layout).
+
+Impact
+
+New unit tests for idempotency header and payload equality; integration test count increased.
+
+Related files
+
+- `assignments/bluebricks/src/routes/blueprintsRouter.ts`
+- `assignments/bluebricks/Dockerfile`
+- `assignments/bluebricks/tests/integration/api.test.ts`
+
+---
+
+## Decision: Validator — Issue #61 verification
+
+Context
+
+Re-validate after Prisma + idempotency changes; run unit, integration, `gh-integration-verify.sh`, and `docker compose build api`.
+
+Options considered
+
+- **Context7 for Prisma P2002:** Used during implementation to confirm `Prisma.PrismaClientKnownRequestError` + `code === 'P2002'` pattern (`/prisma/prisma`).
+
+Decision
+
+- Ran `npm run test:unit`, `bash ci/gh-integration-verify.sh`, `docker compose build api` — all passed in this environment.
+- Updated `workflow/validation.md` with new evidence rows for idempotency failure modes.
+
+Rationale
+
+End-to-end CI hook validates Flyway V2 + integration suite on GitHub runners when PR is labeled.
+
+Trade-offs
+
+- Concurrent POST race is covered by unique index + handler logic; no dedicated stress test (optional per plan).
+
+Impact
+
+Validation report and README run commands aligned with executed commands.
+
+Related files
+
+- `assignments/bluebricks/workflow/validation.md`
+- `assignments/bluebricks/README.md`
