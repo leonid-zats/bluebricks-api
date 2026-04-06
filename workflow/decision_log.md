@@ -434,3 +434,153 @@ Related files
 - `assignments/bluebricks/src/routes/blueprintsRouter.ts`
 - `assignments/bluebricks/tests/unit/errors.test.ts`
 - `assignments/bluebricks/tests/integration/api.test.ts`
+
+---
+
+## Decision: Product Scope Definition — Issue #65 (Blueprint CLI Part 2)
+
+### Context
+
+Issue #65 adds a **Go** HTTP client CLI under `assignments/bluebricks/` that consumes the existing Part 1 **`/blueprints`** API. Task folder **`bluebricks`**; authoritative Part 2 text in **`requirements-part2.md`**.
+
+### Sources
+
+- `assignments/bluebricks/requirements-part2.md` (primary)
+- `assignments/bluebricks/README.md` (API contract summary for client mapping)
+- Issue #65 body: Task Folder `bluebricks`, build from `requirements-part2.md`
+
+### Assumptions
+
+- Binary name **`blueprintctl`**; module root **`assignments/bluebricks/cli/`** per Part 2 suggested layout.
+- **Delete** success prints **no** stdout on **204** (Part 2 allowed either silence or one line; silence chosen for scriptability).
+- **4xx/5xx** response bodies print to **stderr** (Part 2 allowed stdout or stderr; stderr chosen to keep stdout clean for piping JSON on success).
+- **HTTP client timeout** **60s** for the whole request (not stated in Part 2; needed for deterministic behavior).
+- **`--order` without `--sort`** is rejected client-side (invalid combination).
+
+### Conflicts
+
+- None: issue defers to `requirements-part2.md`; Part 1 `workflow/requirements.md` described only the API — Part 2 work is additive CLI scope documented in **`workflow/product_requirements_clarified.md`**.
+
+### Decision
+
+Implement Part 2 exactly: **Cobra** (or one of the listed frameworks — **Cobra** in plan), **`net/http`**, env **`BLUEPRINTS_API_BASE`** + **`--base-url`**, five commands, optional idempotency + list sort flags, **`go test`** with **httptest**, README examples with **`bricks.json`**.
+
+### Rationale
+
+Matches homework Section 2 and keeps the CLI a thin, testable client with no direct DB access.
+
+### Trade-offs
+
+- **Determinism:** Fixed validation messages and timeout.
+- **Complexity:** Cobra vs `flag` — slightly more boilerplate for clearer subcommands.
+- **Flexibility:** No config file or auth per non-goals.
+- **Failure handling:** Distinct exit **1** vs **2** for client vs server/network errors.
+
+---
+
+## Decision: Architecture — Issue #65 (Go CLI)
+
+Context
+
+Add a Go module under `assignments/bluebricks/cli/` that implements the Part 2 client per `workflow/product_requirements_clarified.md`.
+
+Options considered
+
+- **`flag` only:** Fewer deps but awkward multi-subcommand UX.
+- **urfave/cli/v2:** Good; team familiarity with Cobra in similar tools.
+- **Cobra:** Standard for subcommands; matches “pick one and stay consistent.”
+
+Decision
+
+- **Go 1.22+**, **Cobra** for CLI structure, **`net/http`** with **`http.Client`** (timeout **60s**).
+- Packages: **`cmd/blueprintctl`** (main), **`internal/client`** (HTTP + exit-code policy), **`internal/config`** (base URL resolve), **`internal/validate`** (id/page/sort flags).
+- **≤10 Go source files** under `cli/` including tests.
+
+Rationale
+
+Minimal moving parts; httptest targets `internal/client` or a small `Run` function; no new infrastructure.
+
+Trade-offs
+
+- Adds `cobra` module dependency vs stdlib-only.
+
+Impact
+
+New tree `assignments/bluebricks/cli/`; README gains CLI section; API code unchanged.
+
+Related files
+
+- `assignments/bluebricks/workflow/requirements.md`
+- `assignments/bluebricks/workflow/plan.md`
+- `assignments/bluebricks/cli/**`
+
+---
+
+## Decision: Builder — Issue #65 Go CLI (blueprintctl)
+
+Context
+
+Implement `requirements-part2.md` as a Go HTTP client under `assignments/bluebricks/cli/`.
+
+Options considered
+
+- **urfave/cli** vs **Cobra** — Cobra chosen in Architect entry for subcommands.
+- **Single file** vs split **`internal/*`** — split for testability and SRP.
+
+Decision
+
+- Module **`blueprintctl`**, **`cmd/blueprintctl`**, **`internal/runner`** (Cobra + exit mapping), **`internal/client`** (**60s** timeout), **`internal/config`**, **`internal/urls`**, **`internal/validate`**.
+- **`runner.Run`** accepts injectable **`http.Client`** (via `client.Client`) for **httptest** servers.
+- **`ci/gh-integration-verify.sh`** runs **`(cd cli && go test ./...)`** when **`go`** exists.
+
+Rationale
+
+Meets Part 2 checklist, keeps API unchanged, and adds CI coverage for the CLI on GitHub runners.
+
+Trade-offs
+
+- More Go files than a single `main.go`; justified by required **httptest** and validation tests.
+
+Impact
+
+New `cli/` tree; README and integration script updated.
+
+Related files
+
+- `assignments/bluebricks/cli/**`
+- `assignments/bluebricks/ci/gh-integration-verify.sh`
+- `assignments/bluebricks/README.md`
+
+---
+
+## Decision: Validator — Issue #65 verification
+
+Context
+
+Validate CLI against `workflow/requirements.md`; run `go test` and Node unit tests; update `workflow/validation.md`.
+
+Options considered
+
+- Run full `docker compose` locally — optional; Cloud may block bridge; Node suite unchanged from prior issue.
+
+Decision
+
+- Ran `cd assignments/bluebricks/cli && go test ./... -count=1` (all packages ok).
+- Ran `cd assignments/bluebricks && npm run test:unit` (19 tests passed).
+- Documented failure-mode ↔ test mapping and scoring in `workflow/validation.md`.
+
+Rationale
+
+Evidence matches executed commands; CLI contract covered by **httptest** tests.
+
+Trade-offs
+
+- Did not run `docker compose` or end-to-end manual CLI against live API in this session.
+
+Impact
+
+Validation report reflects Go + Vitest runs; README counts aligned.
+
+Related files
+
+- `assignments/bluebricks/workflow/validation.md`

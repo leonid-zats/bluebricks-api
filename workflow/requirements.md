@@ -1,100 +1,106 @@
-# Requirements — Blueprint Manager API (implementation)
+# Requirements — Blueprint CLI (Part 2, implementation)
 
-**Source:** `workflow/product_requirements_clarified.md` (authoritative intent). Paths below are under `assignments/bluebricks/`.
+**Source:** `workflow/product_requirements_clarified.md` (authoritative). The Part 1 HTTP API lives under `assignments/bluebricks/src/` and is **not** modified for this task except as needed for unrelated fixes (none required). Paths below for the CLI are under **`assignments/bluebricks/cli/`**.
 
 ## Primary goal
 
-Node.js + TypeScript HTTP service storing Blueprints in PostgreSQL with CRUD at `/blueprints`, **Prisma ORM** for persistence, Flyway migrations, Docker Compose (`postgres:16-alpine` + API), unit tests (no DB) and integration tests (real Postgres + Flyway). Canonical `blueprint_data` example: `bricks.json`.
+**Go** CLI (**HTTP client only**) calling the Blueprint Manager API at **`{base}/blueprints`**. No Postgres. Success JSON to **stdout**; errors and API error bodies to **stderr** per conventions below. **`../bricks.json`** (from `cli/` working directory: `assignments/bluebricks/bricks.json`) is the canonical sample for **create** / **update** in README examples.
 
 ## Deliverables
 
-1. TypeScript source in `src/` (Express + **Prisma Client**).
-2. `prisma/schema.prisma` matching Flyway-managed tables.
-3. Flyway SQL in `db/migration/` including **`V2__add_idempotency_key.sql`** (nullable `idempotency_key`, unique index).
-4. `Dockerfile`, `docker-compose.yml` (API image runs `prisma generate` / copies generated engine as in Dockerfile).
-5. `ci/gh-integration-verify.sh` — idempotent Compose up (db), Flyway migrate, `npm ci`, `npm run test:integration`, tear down.
-6. `package.json` scripts: `test`, `test:unit`, `test:integration`, `build` (includes `prisma generate`), `start`.
-7. `README.md` with run/verify and **post_agent_integration** hook reference.
-8. **OOP:** `IBlueprintRepository` interface + `PrismaBlueprintRepository` implementation; router receives `PrismaClient` (or repository) from composition root.
+1. Go module at **`assignments/bluebricks/cli/`** with **`go.mod`** (Go **≥ 1.22**).
+2. **`cmd/blueprintctl/main.go`** entrypoint; **`go build -o blueprintctl ./cmd/blueprintctl`** produces binary **`blueprintctl`**.
+3. Subcommands: **`create`**, **`get`**, **`list`**, **`update`**, **`delete`** with flags and HTTP mapping in the table below.
+4. **`go test ./...`** (no Docker): unit tests for URL resolution, validation; **≥ 1** **`httptest.Server`** test asserting method, path, query (for **`list`** or **`get`**), and stdout content.
+5. **`assignments/bluebricks/README.md`**: CLI build, env **`BLUEPRINTS_API_BASE`**, flag **`--base-url`**, examples for all five commands using **`http://localhost:3000`** and **`bricks.json`**; reference **`post_agent_integration`** / **`ci/gh-integration-verify.sh`** for API verification.
 
 ## Functional requirements
 
-### Table `blueprints`
+### Base URL
 
-| Column | Type | Rules |
-|--------|------|-------|
-| id | serial PK | JSON number |
-| name | varchar NOT NULL | Create: required, non-empty trim; PUT: if key present, non-empty trim |
-| version | varchar NOT NULL | Same |
-| author | varchar NOT NULL | Same |
-| blueprint_data | JSONB NOT NULL | Create: required JSON object; PUT: if key present, object |
-| created_at | timestamptz NOT NULL | Server default on insert; not updated on PUT |
-| idempotency_key | varchar NULL, unique when set | Set on POST only when `Idempotency-Key` header present (non-empty after trim, max 255) |
+- Default: **`http://localhost:3000`**
+- Env: **`BLUEPRINTS_API_BASE`** (non-empty after trim wins over default).
+- Flag: **`--base-url`** on root (persistent flag for subcommands): non-empty overrides env and default.
+- Join **`/blueprints`** and **`/blueprints/{id}`** without double slashes (normalize trailing slash on base).
 
-Migration must support sorts: `name`, `version`, `created_at`, and default **`created_at DESC, id DESC`**.
+### Commands
 
-### Routes
+| Command | Flags | HTTP | Success |
+|---------|--------|------|---------|
+| **create** | **`--file`**, optional **`--idempotency-key`** | **POST** `{base}/blueprints`, `Content-Type: application/json`, body = file bytes; header **`Idempotency-Key`** if flag set | Print response body to **stdout**; exit **0** |
+| **get** | **`--id`** | **GET** `{base}/blueprints/{id}` | Print JSON to **stdout**; exit **0** |
+| **list** | **`--page`**, **`--page-size`**, optional **`--sort`**, **`--order`** | **GET** `{base}/blueprints?page=&page_size=` + optional `sort` & `order` | Print full list JSON to **stdout**; exit **0** |
+| **update** | **`--id`**, **`--file`** | **PUT** `{base}/blueprints/{id}` | Print JSON to **stdout**; exit **0** |
+| **delete** | **`--id`** | **DELETE** `{base}/blueprints/{id}` | **204:** print **nothing** to **stdout**; exit **0** |
 
-- **`POST /blueprints`** — Optional header `Idempotency-Key` (case-insensitive). Empty/whitespace → absent. Max length **255** after trim → **400** `validation_error`. Same key + same body as existing row → **200** with same representation. Same key + different body → **409** `{ "error": "conflict", "message": "Idempotency-Key already used with a different request body" }`. No key → **201** on success. Handle **P2002** race: re-read by key and return **200** or **409** accordingly. **Malformed JSON** (`Content-Type: application/json`, body not valid JSON): **400** `{ "error": "validation_error", "message": "Invalid JSON body" }` (not **500**).
-- **`GET /blueprints`** — Query: `page` (≥1, default 1), `page_size` (1–100, default 20), `sort` optional: `name` | `version` | `created_at`, `order`: `asc` | `desc` (default `asc` when `sort` set). If `sort` omitted: order by `created_at DESC, id DESC`. Response: `{ items, page, page_size, total, total_pages }`. **Items MUST NOT include `idempotency_key`.** Invalid query → 400. `total_pages` = 0 when `total=0`.
-- **`GET /blueprints/:id`** — 200 or 404 structured JSON. Non-numeric or non-positive `id` → 400. No `idempotency_key` in JSON.
-- **`PUT /blueprints/:id`** — Merge update; 200 or 404. Malformed `id` → 400. Does not change `idempotency_key`.
-- **`DELETE /blueprints/:id`** — 204 success; 404 if missing. Malformed `id` → 400.
+### Client-side validation (before HTTP)
 
-### HTTP contract tests
+- **`--id`:** positive integer string (digits only, value ≥ 1). Else stderr + exit **1**.
+- **`--page`:** integer ≥ **1**. Else stderr + exit **1**.
+- **`--page-size`:** integer **1–100**. Else stderr + exit **1**.
+- **`--sort`:** if set, one of **`name`**, **`version`**, **`created_at`**. Else stderr + exit **1**.
+- **`--order`:** if set, **`asc`** or **`desc`**. Else stderr + exit **1**.
+- **`--order` without `--sort`:** stderr + exit **1**.
+- **`--file`:** must exist and be readable; else stderr + exit **1**.
 
-Tests MUST assert **exact** success and error shapes: status codes, JSON fields (`error`, `message` where specified), **201 vs 200** idempotent POST, **409 conflict** body, and success payloads including `id`, `created_at` ISO string, nested `blueprint_data` (no `idempotency_key`). **Integration:** assert **list row order** for `sort=name&order=asc` (two creates, names ordered ascending) and for `sort=created_at&order=asc` (two creates with measurable `created_at` difference, ascending timestamps); assert malformed JSON POST returns **400** with exact `error` / `message` above.
+### HTTP error semantics
 
-## Validation
+- **2xx:** as above.
+- **4xx:** write response body to **stderr** (raw); exit **1**.
+- **5xx:** write response body to **stderr** (raw); exit **2**.
+- **Network / timeout / TLS / DNS:** stderr with cause; exit **2**.
+- **`http.Client` timeout:** **60 seconds** per request (document in README).
 
-- Create: `name`, `version`, `author`, `blueprint_data` (object) required.
-- List: bounded `page_size`, valid `sort`/`order`/`page`.
-- `Idempotency-Key`: length ≤ 255 when non-empty after trim.
+### CLI / usage errors
+
+- Cobra usage errors: stderr; exit **1**.
+
+## HTTP contract tests (CLI)
+
+Tests MUST assert **exact** exit codes (**0** / **1** / **2**) and that **4xx** and **5xx** responses produce **stderr** containing the API body (where a body is returned). **httptest** test MUST assert **method**, **URL path**, **query string** for **`list`** (or **`get`**), and **stdout** for success JSON.
 
 ## Distributed systems & reliability (always consider)
 
 ### 1. Recovery model
 
-PostgreSQL is the source of truth; no queue. **POST without `Idempotency-Key`** is not idempotent (retries may duplicate). **POST with key** is idempotent for successful creates: same key + same body returns **200** with original row. Uncommitted work lost on crash.
+**N/A:** Stateless CLI; no local durable queue. Safe **create** retries use server **`Idempotency-Key`** when user passes **`--idempotency-key`**.
 
 ### 2. Replay capability
 
-N/A for event streams. Idempotent POST supports safe client retries when key and payload match.
+**N/A** for CLI-internal replay. User may re-run commands; API defines **POST** replay (**200** vs **201**).
 
 ### 3. Consistency model
 
-Per-request **read committed** against PostgreSQL; no app stale cache.
+Single HTTP request per invocation; **strong** per-response snapshot (whatever the API returns).
 
 ### 4. Scaling model
 
-Stateless API; single DB. Idempotency keys are global in `blueprints` table (client may encode tenant in key string).
+**N/A** beyond “many CLI processes may call one API”; no shared CLI state.
 
 ### 5. Failure modes
 
-**Baseline:**
+**Baseline (template):**
 
-- Crash before commit: retry with idempotency key yields **200** if first commit succeeded; else **201** on first success.
-- DB unavailable: **503** `{ "error": "service_unavailable", "message": "Database unavailable" }` (map Prisma connection / P1001 / P1017 where applicable).
-- Pool / slow DB: timeouts → 503 where mapped.
-- Queue overload: N/A.
+- **Crash before response:** partial stdout possible; user retries manually.
+- **API / DB unavailable:** exit **2**; stderr shows network or **5xx** body.
+- **Queue overload:** N/A in CLI.
 
-**Task-specific named scenarios:**
+**Task-specific named scenarios** (minimum 3 — tests or manual steps in `plan.md`):
 
-1. **Invalid pagination or sort** — Bad `page`/`page_size`/`sort`/`order` → **400**, structured error.
-2. **DB connection failure** — Wrong URL or DB down → **503** structured (integration test with bad `DATABASE_URL`).
-3. **Malformed body or invalid `blueprint_data`** — Invalid JSON syntax → **400** `validation_error` / `Invalid JSON body`. Invalid shape (e.g. `blueprint_data` null) → **400** Zod message; no insert.
-4. **Idempotency key conflict (different body)** — **409** `conflict`, exact message above.
-5. **Concurrent POST same new idempotency key** — Unique index + P2002 handling; exactly one row; others **200** or **409**.
+1. **Invalid `--id` (client validation)** — Trigger: `--id 0` / non-numeric. Expected: **stderr**, exit **1**, **no** HTTP. Mitigation: fix args.
+2. **Unreadable `--file`** — Trigger: missing path. Expected: **stderr**, exit **1**, no HTTP. Mitigation: fix path.
+3. **API **404** on get** — Trigger: unknown id. Expected: **stderr** has JSON body, exit **1**. Mitigation: correct id.
+4. **Connection refused** — Trigger: API down. Expected: **stderr**, exit **2**. Mitigation: start API / fix base URL.
+5. **API **503** (e.g. DB down)** — Trigger: server error. Expected: body to **stderr**, exit **2**. Mitigation: restore DB.
 
 ## Non-goals
 
-Auth, Go CLI, catalog semantics beyond JSON storage.
+Auth, config files, TUI, embedding Node, module proxy publish.
 
 ## Acceptance checklist
 
-- [ ] All five routes + malformed id handling
-- [ ] Flyway V1 + V2; Prisma schema aligned
-- [ ] Compose: official postgres + API build
-- [ ] Idempotent POST: 200 replay, 409 conflict, optional race (P2002)
-- [ ] Unit + integration; `bricks.json` in ≥1 integration test
-- [ ] `ci/gh-integration-verify.sh` for GitHub Actions
+- [ ] `go build` produces **`blueprintctl`**
+- [ ] All five commands + optional flags
+- [ ] Base URL env + flag + slash normalization
+- [ ] `go test ./...` passes without Docker; includes **httptest**
+- [ ] README: **`bricks.json`** examples + run instructions

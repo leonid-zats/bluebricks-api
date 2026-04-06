@@ -35,6 +35,13 @@ npm ci
 export SKIP_FLYWAY_INTEGRATION=1
 npm run test:integration
 
+if command -v go >/dev/null 2>&1; then
+  echo "Running Go CLI tests (blueprintctl)..."
+  (cd cli && go test ./...)
+else
+  echo "Skipping Go CLI tests: go not found on PATH"
+fi
+
 echo "Cleanup..."
 docker compose down -v
 

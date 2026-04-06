@@ -73,11 +73,52 @@ The integration script runs Flyway then Vitest unless `SKIP_FLYWAY_INTEGRATION=1
 
 ## Post-agent CI (GitHub)
 
-After an issue-triggered agent run, workflow **Cursor - label trigger** (`.github/workflows/cursor-label.yml`) runs job **`post_agent_integration`**, which executes `assignments/bluebricks/ci/gh-integration-verify.sh` when present. That script brings up `db`, runs Flyway via Docker, runs `npm ci` and `npm run test:integration`, then tears down volumes.
+After an issue-triggered agent run, workflow **Cursor - label trigger** (`.github/workflows/cursor-label.yml`) runs job **`post_agent_integration`**, which executes `assignments/bluebricks/ci/gh-integration-verify.sh` when present. That script brings up `db`, runs Flyway via Docker, runs `npm ci` and `npm run test:integration`, runs **`go test ./...`** under **`cli/`** when Go is installed, then tears down volumes.
 
 ## Canonical example payload
 
 `bricks.json` matches the assignment’s example and is used in integration tests.
+
+---
+
+## Blueprint CLI (Part 2 — Issue #65)
+
+Go module under **`cli/`**: **`blueprintctl`** talks to this API over HTTP only (no direct Postgres). Requires **Go 1.22+**.
+
+| Setting | Description |
+|---------|-------------|
+| `BLUEPRINTS_API_BASE` | API base URL (default **`http://localhost:3000`**) |
+| `--base-url` | Global flag; non-empty value overrides the env var and default |
+
+Trailing slashes on the base URL are normalized so paths resolve to **`{base}/blueprints`** and **`{base}/blueprints/{id}`** without double slashes.
+
+**Exit codes:** **0** success; **1** usage / client-side validation / **4xx**; **2** network errors / **5xx**. Successful JSON responses are printed to **stdout**. API error bodies (**4xx** / **5xx**) are printed to **stderr**. **`delete`** on **204** prints nothing to **stdout**. Each HTTP call uses a **60-second** client timeout.
+
+### Build and test (CLI)
+
+```bash
+cd assignments/bluebricks/cli
+go test ./...
+go build -o blueprintctl ./cmd/blueprintctl
+```
+
+### Example invocations (API at `http://localhost:3000`)
+
+With the API running (e.g. `docker compose up --build` from `assignments/bluebricks/`), from **`assignments/bluebricks/cli/`**:
+
+```bash
+export BLUEPRINTS_API_BASE=http://localhost:3000
+
+./blueprintctl create --file ../bricks.json
+./blueprintctl create --file ../bricks.json --idempotency-key my-key-1
+
+./blueprintctl list --page 1 --page-size 20
+./blueprintctl list --page 1 --page-size 20 --sort name --order asc
+
+./blueprintctl get --id 1
+./blueprintctl update --id 1 --file ../bricks.json
+./blueprintctl delete --id 1
+```
 
 ---
 
@@ -86,6 +127,8 @@ After an issue-triggered agent run, workflow **Cursor - label trigger** (`.githu
 The service uses **Prisma** for all database access, with **`IBlueprintRepository`** implemented by **`PrismaBlueprintRepository`**. Flyway migration **`V2__add_idempotency_key.sql`** adds a nullable, uniquely indexed **`idempotency_key`** column. **`POST /blueprints`** reads the **`Idempotency-Key`** header: duplicate key with matching body returns **200** and the original row; duplicate key with a different body returns **409**. Concurrent creates with the same new key rely on the unique index and **P2002** handling. List queries use Prisma `orderBy` with fixed sort branches (no user-controlled SQL fragments). The **Dockerfile** copies **`prisma/`** before **`npm ci`** so `postinstall` can run `prisma generate`, and copies the generated **`.prisma`** engine from the build stage into the production image.
 
 **Issue #63:** Integration tests assert **row order** for **`sort=name&order=asc`** and **`sort=created_at&order=asc`**. Invalid JSON bodies on POST are mapped in **`blueprintErrorHandler`** from Express body-parser’s **`entity.parse.failed`** (**400**) to **`{ "error": "validation_error", "message": "Invalid JSON body" }`** so clients never see **500** for a simple syntax error.
+
+**Issue #65:** The **`cli/`** Go module implements **`blueprintctl`** with **Cobra** subcommands (**create**, **get**, **list**, **update**, **delete**), **`net/http`**, and **`httptest`**-backed tests for request shape and exit codes. **`ci/gh-integration-verify.sh`** runs **`go test ./...`** in **`cli/`** when **`go`** is on `PATH` so GitHub-hosted runners exercise the CLI alongside the Node integration suite.
 
 ## Key Decisions
 
@@ -96,11 +139,18 @@ The service uses **Prisma** for all database access, with **`IBlueprintRepositor
 - **`ci/gh-integration-verify.sh`** unchanged contract; applies **V1 + V2** migrations on CI.  
 - **`isMalformedJsonBodyError`** (issue #63) detects body-parser JSON parse failures and returns structured **400** like other validation errors.  
 - **Integration sort tests** (issue #63) filter rows by unique name prefix and assert ordering ( **`page_size` ≤ 100** per API rules).  
+- **Issue #65 — `blueprintctl`:** **Cobra** CLI, **`internal/runner`** (commands + exit mapping), **`internal/client`** (**60s** timeout), **`internal/config`** / **`internal/urls`** / **`internal/validate`**; **4xx → stderr + exit 1**, **5xx / network → stderr + exit 2**; **`delete` 204** silent **stdout**.  
 
 ## Code Structure
 
 | Path | Role |
 |------|------|
+| `cli/cmd/blueprintctl/main.go` | CLI entry (`runner.Run`) |
+| `cli/internal/runner/` | Subcommands, HTTP orchestration, exit codes |
+| `cli/internal/client/` | `http.Client` wrapper |
+| `cli/internal/config/` | `BLUEPRINTS_API_BASE` / `--base-url` resolution |
+| `cli/internal/urls/` | Join base + `/blueprints` paths |
+| `cli/internal/validate/` | `--id`, `--page`, `--page-size`, `--sort` / `--order` |
 | `prisma/schema.prisma` | Prisma model → `blueprints` table |
 | `src/db/prisma.ts` | `createPrismaClient` (optional URL override for tests) |
 | `src/repository/types.ts` | `BlueprintRow`, input types |
@@ -132,6 +182,7 @@ npm run test:unit
 bash ci/gh-integration-verify.sh
 npm run build
 docker compose build api
+cd cli && go test ./...
 ```
 
-Expected: unit tests pass (**20** tests including `errors.test.ts`); integration script runs Flyway (if needed), **14** integration tests pass, Compose teardown succeeds; TypeScript build succeeds; API image builds successfully.
+Expected: unit tests pass (Vitest **19** tests in `tests/unit/`); integration script runs Flyway (if needed), integration tests pass, **`go test ./...`** in **`cli/`** passes when Go is available, Compose teardown succeeds; TypeScript build succeeds; API image builds successfully.
