@@ -196,7 +196,6 @@ The service uses **Prisma** for all database access, with **`IBlueprintRepositor
 - **`IBlueprintRepository`** + **`PrismaBlueprintRepository`** for OOP boundaries.  
 - **Idempotency** via **`Idempotency-Key`** header + DB unique constraint + payload deep equality (`util.isDeepStrictEqual` on `blueprint_data`).  
 - **Public JSON omits `idempotency_key`.**  
-- **`ci/gh-integration-verify.sh`** unchanged contract; applies **V1 + V2** migrations on CI.  
 - **`isMalformedJsonBodyError`** (issue #63) detects body-parser JSON parse failures and returns structured **400** like other validation errors.  
 - **Integration sort tests** (issue #63) filter rows by unique name prefix and assert ordering ( **`page_size` ≤ 100** per API rules).  
 - **Issue #65 — `blueprintctl`:** **Cobra** CLI, **`internal/runner`** (commands + exit mapping), **`internal/client`** (**60s** timeout), **`internal/config`** / **`internal/urls`** / **`internal/validate`**; **4xx → stderr + exit 1**, **5xx / network → stderr + exit 2**; **`delete` 204** silent **stdout**.  
