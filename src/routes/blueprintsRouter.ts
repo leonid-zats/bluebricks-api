@@ -1,10 +1,13 @@
+import { Prisma } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { Router, type Request, type Response, type NextFunction } from "express";
-import type pg from "pg";
 import { ZodError } from "zod";
 import { HttpError } from "../errors.js";
-import { BlueprintRepository } from "../repository/BlueprintRepository.js";
+import { isSameCreatePayload } from "../repository/blueprintPayload.js";
+import { PrismaBlueprintRepository } from "../repository/PrismaBlueprintRepository.js";
 import { blueprintToJson } from "../serialization.js";
 import { createBlueprintSchema, mergeUpdateSchema, bodyErrorMessage } from "../validation/body.js";
+import { parseIdempotencyKeyHeader } from "../validation/idempotencyKey.js";
 import { parseListQuery, listQueryErrorMessage } from "../validation/listQuery.js";
 
 function parseIdParam(raw: string | string[] | undefined): number {
@@ -30,20 +33,81 @@ function isDbConnectionError(err: unknown): boolean {
   return false;
 }
 
-export function createBlueprintsRouter(pool: pg.Pool): Router {
-  const repo = new BlueprintRepository(pool);
+function isPrismaConnectionError(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientInitializationError) {
+    return true;
+  }
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    return err.code === "P1001" || err.code === "P1017";
+  }
+  return false;
+}
+
+function isIdempotencyUniqueViolation(err: unknown): boolean {
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") {
+    return false;
+  }
+  const target = err.meta?.target;
+  if (typeof target === "string") {
+    return target === "idempotency_key" || target.includes("idempotency_key");
+  }
+  if (Array.isArray(target)) {
+    return target.some((t) => t === "idempotency_key");
+  }
+  return false;
+}
+
+export function createBlueprintsRouter(prisma: PrismaClient): Router {
+  const repo = new PrismaBlueprintRepository(prisma);
   const r = Router();
 
   r.post("/", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = createBlueprintSchema.parse(req.body);
-      const row = await repo.create({
-        name: body.name,
-        version: body.version,
-        author: body.author,
-        blueprint_data: body.blueprint_data,
-      });
-      res.status(201).json(blueprintToJson(row));
+      const idemKey = parseIdempotencyKeyHeader(req.headers["idempotency-key"]);
+
+      if (idemKey) {
+        const existing = await repo.findByIdempotencyKey(idemKey);
+        if (existing) {
+          if (isSameCreatePayload(existing, body)) {
+            res.status(200).json(blueprintToJson(existing));
+            return;
+          }
+          throw new HttpError(
+            409,
+            "conflict",
+            "Idempotency-Key already used with a different request body",
+          );
+        }
+      }
+
+      try {
+        const row = await repo.create({
+          name: body.name,
+          version: body.version,
+          author: body.author,
+          blueprint_data: body.blueprint_data,
+          idempotency_key: idemKey,
+        });
+        res.status(201).json(blueprintToJson(row));
+      } catch (e) {
+        if (idemKey && isIdempotencyUniqueViolation(e)) {
+          const winner = await repo.findByIdempotencyKey(idemKey);
+          if (!winner) {
+            throw e;
+          }
+          if (isSameCreatePayload(winner, body)) {
+            res.status(200).json(blueprintToJson(winner));
+            return;
+          }
+          throw new HttpError(
+            409,
+            "conflict",
+            "Idempotency-Key already used with a different request body",
+          );
+        }
+        throw e;
+      }
     } catch (e) {
       next(e);
     }
@@ -119,7 +183,7 @@ export function blueprintErrorHandler(err: unknown, _req: Request, res: Response
     });
     return;
   }
-  if (isDbConnectionError(err)) {
+  if (isDbConnectionError(err) || isPrismaConnectionError(err)) {
     res.status(503).json({
       error: "service_unavailable",
       message: "Database unavailable",

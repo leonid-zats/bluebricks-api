@@ -1,5 +1,6 @@
-import type { BlueprintRow } from "./repository/BlueprintRepository.js";
+import type { BlueprintRow } from "./repository/types.js";
 
+/** Public API JSON (hides internal `idempotency_key`). */
 export function blueprintToJson(row: BlueprintRow) {
   return {
     id: row.id,
