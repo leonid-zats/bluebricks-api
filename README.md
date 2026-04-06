@@ -19,7 +19,6 @@ Assignment brief: see `requirements/requirements.md` (Part 1) and `requirements/
   - [Example invocations (API at `http://localhost:3000`)](#example-invocations-api-at-httplocalhost3000)
 - [Implementation Summary](#implementation-summary)
 - [Key Decisions](#key-decisions)
-- [Code Structure](#code-structure)
 - [Run & Verify Locally](#run--verify-locally)
 
 ## Agentic runs (workflow snapshots)
@@ -201,38 +200,6 @@ The service uses **Prisma** for all database access, with **`IBlueprintRepositor
 - **`isMalformedJsonBodyError`** (issue #63) detects body-parser JSON parse failures and returns structured **400** like other validation errors.  
 - **Integration sort tests** (issue #63) filter rows by unique name prefix and assert ordering ( **`page_size` ≤ 100** per API rules).  
 - **Issue #65 — `blueprintctl`:** **Cobra** CLI, **`internal/runner`** (commands + exit mapping), **`internal/client`** (**60s** timeout), **`internal/config`** / **`internal/urls`** / **`internal/validate`**; **4xx → stderr + exit 1**, **5xx / network → stderr + exit 2**; **`delete` 204** silent **stdout**.  
-
-## Code Structure
-
-| Path | Role |
-|------|------|
-| `cli/cmd/blueprintctl/main.go` | CLI entry (`runner.Run`) |
-| `cli/internal/runner/` | Subcommands, HTTP orchestration, exit codes |
-| `cli/internal/client/` | `http.Client` wrapper |
-| `cli/internal/config/` | `BLUEPRINTS_API_BASE` / `--base-url` resolution |
-| `cli/internal/urls/` | Join base + `/blueprints` paths |
-| `cli/internal/validate/` | `--id`, `--page`, `--page-size`, `--sort` / `--order` |
-| `prisma/schema.prisma` | Prisma model → `blueprints` table |
-| `src/db/prisma.ts` | `createPrismaClient` (optional URL override for tests) |
-| `src/repository/types.ts` | `BlueprintRow`, input types |
-| `src/repository/IBlueprintRepository.ts` | Persistence interface |
-| `src/repository/PrismaBlueprintRepository.ts` | Prisma implementation |
-| `src/repository/blueprintPayload.ts` | Idempotent body equality |
-| `src/validation/idempotencyKey.ts` | Parse / validate `Idempotency-Key` header |
-| `src/server.ts` | Prisma client, HTTP server, `$disconnect` on shutdown |
-| `src/app.ts` | Express app + JSON middleware |
-| `src/errors.ts` | `HttpError`, **`isMalformedJsonBodyError`** (invalid JSON from body-parser) |
-| `src/validation/listQuery.ts` | List query parsing (unit-tested) |
-| `src/validation/body.ts` | Create / merge body schemas |
-| `src/serialization.ts` | Row → API JSON (hides `idempotency_key`) |
-| `src/routes/blueprintsRouter.ts` | Routes, idempotent POST, error handler |
-| `db/migration/V1__create_blueprints.sql` | Initial DDL |
-| `db/migration/V2__add_idempotency_key.sql` | Idempotency column + unique index |
-| `scripts/migrate-flyway.sh` | Flyway migrate (Docker) |
-| `scripts/run-integration-tests.sh` | Flyway + Vitest integration |
-| `ci/gh-integration-verify.sh` | GitHub Actions integration hook |
-| `tests/unit/` | Validation + idempotency + **JSON error shape** unit tests |
-| `tests/integration/api.test.ts` | HTTP + real Postgres |
 
 ## Run & Verify Locally
 
