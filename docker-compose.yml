@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: blueprint
+      POSTGRES_PASSWORD: blueprint
+      POSTGRES_DB: blueprints
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blueprint -d blueprints"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  flyway:
+    image: flyway/flyway:10-alpine
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./db/migration:/flyway/sql:ro
+    command:
+      - -url=jdbc:postgresql://db:5432/blueprints
+      - -user=blueprint
+      - -password=blueprint
+      - migrate
+
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://blueprint:blueprint@db:5432/blueprints
+      PORT: "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      flyway:
+        condition: service_completed_successfully
