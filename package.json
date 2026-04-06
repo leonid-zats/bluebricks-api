@@ -1,0 +1,33 @@
+{
+  "name": "bluebricks-blueprint-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "start:dev": "tsx watch src/server.ts",
+    "migrate:flyway": "bash scripts/migrate-flyway.sh",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run --config vitest.config.unit.ts",
+    "test:integration": "bash scripts/run-integration-tests.sh"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.13.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

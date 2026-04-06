@@ -1,0 +1,12 @@
+{
+  "name": "aws_neptune",
+  "version": "1.1.0",
+  "author": "bluebricks@example.com",
+  "blueprint_data": {
+    "description": "AWS Neptune Blueprint for Bluebricks",
+    "manifest_version": 1,
+    "packages": [],
+    "props": {},
+    "outs": {}
+  }
+}
